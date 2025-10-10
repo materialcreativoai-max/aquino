@@ -1,21 +1,9 @@
-
 <!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (frases naturales v2)</title>
-<style>
-:root{--pri:#0b5cff;}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
-.wrap{max-width:860px;margin:0 auto;padding:18px}
-
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (frases naturales v3)</title>
+<title>Aquí Nomás — Demo (Pack A: intersecciones + cerca + fuzzy)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -41,11 +29,11 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-<h1>🏷️ Aquí Nomás — demo (frases naturales v3)</h1>
+<h1>🏷️ Aquí Nomás — demo (intersecciones + cerca + fuzzy)</h1>
 
 <div class="box">
   <div class="row">
-    <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos' o 'estoy en el centro y quiero almorzar'"/>
+    <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos', 'almorzar en el centro', 'ferretería en cabildo y juramento', 'flores cerca de Almagro'"/>
     <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
     <button id="goBtn" class="btn">Buscar</button>
     <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -63,39 +51,69 @@ h1{font-size:20px;margin:0 0 14px}
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
 // ===============================================
 
-// Stopwords / muletillas
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
-
-// Normalizadores
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
 
-// CSV parser
 function parseCSV(txt){
   const rows = txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head = rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
 
-// —— interpretador de frases naturales —— 
+// ——— fuzzy matching básico (distancia de edición ≤ 1) ———
+function editDist1(a,b){
+  if(a===b) return 0;
+  const la=a.length, lb=b.length;
+  if(Math.abs(la-lb)>1) return 2; // más de 1 diff
+  // sustituir
+  if(la===lb){
+    let dif=0; for(let i=0;i<la;i++){ if(a[i]!==b[i]){ if(++dif>1) return 2; } }
+    return dif;
+  }
+  // insertar/eliminar
+  let i=0,j=0,dif=0;
+  while(i<la && j<lb){
+    if(a[i]===b[j]){i++;j++;continue;}
+    dif++; if(dif>1) return 2;
+    if(la>lb) i++; else j++;
+  }
+  // resto
+  if(i<la || j<lb) dif++;
+  return dif;
+}
+function approxTokenMatch(a,b){ // a contra b
+  if(!a||!b) return false;
+  if(b.includes(a) || a.includes(b)) return true;
+  return editDist1(a,b) <= 1;
+}
+
+// —— interpretador de frases (zona + intención) —— 
 function understand(raw){
   const t0 = (raw||"").trim();
   const t  = norm(t0);
-  let zona = "", qText = t0;
+  let zona="", qText=t0;
 
-  // 1) “estoy en devoto y necesito clavos”  /  “estoy en devoto necesito clavos”
+  // “estoy en devoto (y) necesito/clavos…”
   let m = t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // 2) “en devoto necesito clavos” / “en el centro quiero almorzar”
+  // “en|por|de devoto necesito/quiero…”
   if(!m) m = t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // 3) “almorzar en devoto” / “quiero comer en el centro”
+  // “almorzar en devoto”
   if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
+  // “cerca de almagro”
+  if(!m) m = t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
+  // “cabildo y juramento”, “esquina cabildo y juramento”
+  if(!m) m = t.match(/(?:esquina\s+)?([a-záéíóúñ\s]+)\s+y\s+([a-záéíóúñ\s]+)$/i);
 
   if(m){
-    zona  = m[1].trim().split(/\s+/).slice(0,4).join(" ");
+    if(m.length>=3 && m[2]){ zona = (m[1]+" "+m[2]).trim(); }
+    else { zona = (m[1]||"").trim(); }
+    // recortar a 4 palabras
+    zona = zona.split(/\s+/).slice(0,4).join(" ");
     qText = t0.replace(new RegExp(m[0],'i'), '').trim();
   }
 
-  // limpia muletillas al inicio
+  // limpiar muletillas al inicio de la intención
   qText = qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
     .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
@@ -106,14 +124,21 @@ function understand(raw){
   return { q:qText, z:zona };
 }
 
-// —— match de barrio robusto (tokens y includes en ambos sentidos) ——
-function barrioMatch(barrio, zona){
-  const tb = new Set(toks(barrio||""));
-  const tz = new Set(toks(zona||""));
-  if(tz.size===0) return true; // sin zona, no filtramos
-  for(const t of tz){ if(tb.has(t)) return true; } // comparte al menos 1 token
-  const nb = norm(barrio||""); const nz = norm(zona||"");
-  if(nb && nz && (nb.includes(nz) || nz.includes(nb))) return true;
+// —— match de ubicación (barrios y dirección, con fuzzy) ——
+function locationMatch(row, zona){
+  if(!zona) return true;
+  const zt = toks(zona);
+  const tb = toks(row.barrio||"");
+  const td = toks(row.direccion||"");
+  for(const z of zt){
+    // barrio tokens
+    for(const b of tb){ if(approxTokenMatch(z,b)) return true; }
+    // dirección tokens (calles, etc.)
+    for(const d of td){ if(approxTokenMatch(z,d)) return true; }
+  }
+  // includes crudo como backup
+  const nb = norm(row.barrio||""), nd = norm(row.direccion||""), nz = norm(zona);
+  if(nb.includes(nz) || nd.includes(nz) || nz.includes(nb) || nz.includes(nd)) return true;
   return false;
 }
 
@@ -147,8 +172,17 @@ function buscarInterno(q,z){
   return DATA.map(l=>{
       const blob = norm(Object.values(l).join(" "));
       let score = 0;
-      qt.forEach(t => { if(blob.includes(t)) score++; });
-      if(z && !barrioMatch(l.barrio||"", z)) score = -1;
+      // score por intención
+      qt.forEach(t=>{
+        if(blob.includes(t)) score += 1;
+        else {
+          // fuzzy: si alguna palabra del blob se parece mucho al token, suma medio punto
+          const words = blob.split(/\s+/);
+          for(const w of words){ if(approxTokenMatch(t,w)){ score += 0.5; break; } }
+        }
+      });
+      // filtro de ubicación (barrio o dirección)
+      if(z && !locationMatch(l,z)) score = -1;
       return { l, score };
     })
     .filter(x=>x.score>0)
@@ -183,7 +217,7 @@ function limpiar(){
   document.getElementById('results').innerHTML="";
 }
 
-// micrófono simple
+// micrófono
 (function(){
   const btn = document.getElementById('micBtn');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -197,6 +231,14 @@ function limpiar(){
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
 
 
 
