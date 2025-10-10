@@ -1,9 +1,9 @@
-<!doctype html>
+<!doctype html><!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (GPS tolerante a formato)</title>
+<title>Aquí Nomás — Demo (GPS robusto)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (GPS tolerante a formato)</h1>
+  <h1>🏷️ Aquí Nomás — demo (GPS robusto)</h1>
 
   <div class="box">
     <div class="row">
@@ -59,10 +59,21 @@ const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesit
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
 
+// CSV parser
 function parseCSV(txt){
   const rows = txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head = rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
+
+// —— normalización de claves: permite “lat ”, “ lat”, tabs, etc. ——
+const keyNorm = k => (k||"").toLowerCase().replace(/[^a-z]/g,"");
+function getField(obj, target){ // target: 'lat' o 'lng'
+  const want = keyNorm(target);
+  for (const k of Object.keys(obj)){
+    if (keyNorm(k) === want) return obj[k];
+  }
+  return undefined;
 }
 
 // —— intérprete de coordenadas flexible ——
@@ -72,7 +83,7 @@ function parseCoordRaw(v) {
   if (!s) return NaN;
   let n = Number(s);
   if (Number.isNaN(n) && /^\-?\d+$/.test(s)) n = parseInt(s, 10);
-  if (Math.abs(n) > 180) n = n / 1e6;
+  if (Math.abs(n) > 180) n = n / 1e6; // microgrados → grados
   return n;
 }
 function parseLat(v){ const n = parseCoordRaw(v); return Math.abs(n) <= 90 ? n : NaN; }
@@ -130,7 +141,18 @@ function locationMatch(row, zona){
 }
 
 let DATA = [];
-fetch(CSV_URL).then(r=>r.text()).then(t=>{ DATA = parseCSV(t); });
+fetch(CSV_URL).then(r=>r.text()).then(t=>{
+  DATA = parseCSV(t);
+  // Debug: mostrar la primera fila y cómo detectamos lat/lng
+  if (DATA.length){
+    const first = DATA[0];
+    const rawLat = getField(first,'lat');
+    const rawLng = getField(first,'lng');
+    console.log('Primera fila:', first);
+    console.log('lat cruda=', rawLat, '→ parseLat=', parseLat(rawLat));
+    console.log('lng cruda=', rawLng, '→ parseLng=', parseLng(rawLng));
+  }
+});
 
 document.getElementById('goBtn').addEventListener('click', buscar);
 document.getElementById('clearBtn').addEventListener('click', limpiar);
@@ -175,18 +197,24 @@ function buscarInterno(q,z){
       const blob = norm(Object.values(l).join(" "));
       let score = 0;
 
+      // intención
       qt.forEach(t=>{ if(blob.includes(t)) score += 1; });
+      // filtro zona si viene
       if(z && !locationMatch(l,z)) score = -1;
 
-      const lat = parseLat(l.lat), lng = parseLng(l.lng);
+      // — coords robustas (busca claves parecidas a 'lat'/'lng')
+      const rawLat = getField(l,'lat');
+      const rawLng = getField(l,'lng');
+      const lat = parseLat(rawLat), lng = parseLng(rawLng);
+
       let distKm = null;
       if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
         distKm = haversineKm(USER_POS, {lat, lng});
-        const bonus = Math.max(0, 2 - (distKm/1.5));
+        const bonus = Math.max(0, 2 - (distKm/1.5)); // 0–2 pts
         score += bonus;
       }
 
-      return { l:{...l, _distKm: distKm}, score };
+      return { l:{...l, _distKm: distKm, _plat: lat, _plng: lng }, score };
     })
     .filter(x=>x.score>0)
     .sort((a,b)=>b.score-a.score)
@@ -198,9 +226,8 @@ function render(items){
   const box = document.getElementById('results');
   if(!items.length){ box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>'; return; }
   box.innerHTML = items.map(r=>{
-    const plat = parseLat(r.lat), plng = parseLng(r.lng);
-    const hasCoords = !isNaN(plat) && !isNaN(plng);
-    const dest = hasCoords ? `${plat},${plng}` : `${r.direccion||''} ${r.barrio||''}`;
+    const hasCoords = !isNaN(r._plat) && !isNaN(r._plng);
+    const dest = hasCoords ? `${r._plat},${r._plng}` : `${r.direccion||''} ${r.barrio||''}`;
     const maps = USER_POS
       ? `https://www.google.com/maps/dir/?api=1&origin=${USER_POS.lat},${USER_POS.lng}&destination=${encodeURIComponent(dest)}&travelmode=walking`
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dest)}`;
@@ -242,11 +269,3 @@ function limpiar(){
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
