@@ -1,9 +1,9 @@
-<!doctype html><!doctype html>
+<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (intención > dirección)</title>
+<title>Aquí Nomás — Demo (intención estricta + zona por/ sobre)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,11 +30,11 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (intención > dirección)</h1>
+  <h1>🏷️ Aquí Nomás — demo (intención estricta + zona por/sobre)</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'quiero almorzar, estoy sobre avenida Santa Fe'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar por avenida Santa Fe'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -58,27 +58,16 @@ const STOP = new Set([
   "necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta",
   "un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del",
   "estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa",
-  // ubicacionales que no aportan intención:
   "avenida","av","sobre","altura","calle"
 ]);
 
-// mapa intención→rubro (normalizado)
+const ACTION_TOKENS = new Set(["almorzar","almuerzo","comer","cenar","cena","desayunar","desayuno"]);
 const INTENT2RUBROS = {
-  "almorzar": ["gastronom"],
-  "almuerzo": ["gastronom"],
-  "comer":    ["gastronom"],
-  "cenar":    ["gastronom"],
-  "cena":     ["gastronom"],
-  "desayunar":["gastronom"],
-  "clavos":   ["ferreter"],
-  "tornillos":["ferreter"],
-  "ferreteria":["ferreter"],
-  "libros":   ["librer"],
-  "resma":    ["librer"],
-  "papel":    ["librer"],
-  "a4":       ["librer"],
-  "flores":   ["florer"],
-  "flor":     ["florer"]
+  "almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],
+  "cenar":["gastronom"],"cena":["gastronom"],"desayunar":["gastronom"],"desayuno":["gastronom"],
+  "clavos":["ferreter"],"tornillos":["ferreter"],"ferreteria":["ferreter"],
+  "libros":["librer"],"resma":["librer"],"papel":["librer"],"a4":["librer"],
+  "flores":["florer"],"flor":["florer"]
 };
 
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
@@ -90,11 +79,11 @@ function parseCSV(txt){
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
 
-// — claves tolerantes a espacios/tab —
+// claves tolerantes
 const keyNorm = k => (k||"").toLowerCase().replace(/[^a-z]/g,"");
 function getField(obj, target){ const want=keyNorm(target); for(const k of Object.keys(obj)){ if(keyNorm(k)===want) return obj[k]; } }
 
-// —— coords robustas —— (acepta -34.5 | -34500000 | "-58.382.320")
+// coords robustas
 function parseCoordRaw(v) {
   if (v == null) return NaN;
   let s = String(v).trim().replace(',', '.');
@@ -119,7 +108,7 @@ function parseCoordRaw(v) {
 function parseLat(v){ const n=parseCoordRaw(v); return Math.abs(n)<=90 ? n : NaN; }
 function parseLng(v){ const n=parseCoordRaw(v); return Math.abs(n)<=180 ? n : NaN; }
 
-// ——— Haversine (km) ———
+// Haversine
 let USER_POS = null;
 function haversineKm(a, b){
   const R=6371, toRad=x=>x*Math.PI/180;
@@ -129,14 +118,20 @@ function haversineKm(a, b){
   return 2*R*Math.asin(Math.min(1, Math.sqrt(A)));
 }
 
-// —— entender frase —— 
+// entender frase (ahora capta “<verbo> en/por/sobre <zona>”)
 function understand(raw){
   const t0=(raw||"").trim(), t=norm(t0);
   let zona="", qText=t0;
+
+  // “estoy en <zona> y ...”
   let m = t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  if(!m) m = t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
+  // “en|por|de|sobre <zona> ...”
+  if(!m) m = t.match(/(?:^|\s)(?:en|por|de|sobre)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  // “<verbo> en|por|sobre <zona>”
+  if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?(?:en|por|sobre)\s+([a-záéíóúñ\s]+)$/i);
+  // “cerca de <zona>”
   if(!m) m = t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
+
   if(m){ zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" "); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
 
   qText=qText
@@ -148,17 +143,14 @@ function understand(raw){
   return {q:qText,z:zona};
 }
 
-// — rubros deseados a partir de los tokens —
+// rubros deseados desde los tokens
 function desiredRubros(tokens){
-  const wants = new Set();
-  for(const t of tokens){
-    const rs = INTENT2RUBROS[t];
-    if(rs) rs.forEach(r=>wants.add(r));
-  }
+  const wants=new Set();
+  for(const t of tokens){ const rs=INTENT2RUBROS[t]; if(rs) rs.forEach(r=>wants.add(r)); }
   return wants;
 }
 
-// — ubicación —
+// zona
 function locationMatch(row, zona){
   if(!zona) return true;
   const zt=toks(zona), tb=toks(row.barrio||""), td=toks(row.direccion||"");
@@ -200,39 +192,44 @@ function buscar(){
 
 function buscarInterno(q,z){
   const qt=toks(q);
-  const wants = desiredRubros(qt);              // rubros deseados por la intención
+  const wants = desiredRubros(qt);
+  const hasAction = qt.some(t=>ACTION_TOKENS.has(t));
   const noIntent = qt.length===0;
 
   return DATA.map(l=>{
-      const rubroNorm = norm(l.rubro||"");      // p.ej. “gastronomía” → “gastronomia” → matchea “gastronom”
-      const blobIntent = norm((l.rubro||"")+" "+(l.keywords||"")); // solo rubro+keywords para intención
+      const rubroNorm = norm(l.rubro||"");
+      const blobIntent = norm((l.rubro||"")+" "+(l.keywords||"")); // solo rubro+keywords
       let score = 0;
 
-      // 1) si hay rubros deseados, exigimos que el rubro matchee o que las keywords lo sugieran
+      // 1) si hay intención: exigir rubro compatible o keywords que contengan el verbo de acción
       if(wants.size){
         let ok=false;
-        for(const w of wants){ if(rubroNorm.includes(w) || qt.some(t=>blobIntent.includes(t))) { ok=true; break; } }
-        if(!ok) score=-1; // descartado por mismatch de intención
+        // a) rubro compatible
+        for(const w of wants){ if(rubroNorm.includes(w)) { ok=true; break; } }
+        // b) si hay verbo (almorzar/comer/...), keywords deben contenerlo
+        if(!ok && hasAction){
+          const verbs = qt.filter(t=>ACTION_TOKENS.has(t));
+          if(verbs.some(v=>blobIntent.includes(v))) ok=true;
+        }
+        if(!ok) score=-1;
       }
 
-      // 2) scoring: tokens solo contra rubro+keywords (no dirección/barrio)
-      if(score>=0){
-        qt.forEach(t=>{ if(blobIntent.includes(t)) score += 1; });
-      }
+      // 2) score por tokens solo contra rubro+keywords
+      if(score>=0){ qt.forEach(t=>{ if(blobIntent.includes(t)) score += 1; }); }
 
       // 3) filtro zona
       if(score>=0 && z && !locationMatch(l,z)) score = -1;
 
-      // 4) bonus por cercanía
+      // 4) bonus cercanía
       const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
       let distKm=null;
       if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
         distKm=haversineKm(USER_POS,{lat,lng});
-        const bonus=Math.max(0, 2 - (distKm/1.5)); // 0–2
+        const bonus=Math.max(0, 2 - (distKm/1.5));
         score+=bonus;
       }
 
-      // 5) si no hay intención pero hay zona o GPS, dejamos pasar con score mínimo
+      // 5) sin intención pero con zona o GPS: dejar pasar mínimo
       if(score===0 && noIntent && (z || USER_POS)) score=0.1;
 
       return { l:{...l,_distKm:distKm,_plat:lat,_plng:lng}, score };
@@ -267,7 +264,8 @@ function render(items){
   }).join("");
 }
 
-(function(){ // Mic
+// Mic
+(function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){btn.disabled=true;btn.innerText='🎤—';btn.title='Dictado no disponible.';return;}
@@ -280,5 +278,4 @@ function render(items){
 </script>
 </body>
 </html>
-
 
