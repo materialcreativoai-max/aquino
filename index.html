@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (fallback de zona)</title>
+<title>Aquí Nomás — Rescate estable</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,11 +30,11 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (fallback de zona)</h1>
+  <h1>🏷️ Aquí Nomás — Rescate estable</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'santa fe', 'santa fe y laprida', 'almorzar en el centro'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar por avenida Santa Fe' o 'santa fe y laprida'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -42,145 +42,81 @@ h1{font-size:20px;margin:0 0 14px}
       <button id="cpyBtn" class="btn secondary">Copiar link</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Usando tu ubicación para ordenar por cercanía.</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Usando tu ubicación.</div>
   </div>
 
   <div id="results" class="box"></div>
 </div>
 
 <script>
-// === tu Google Sheets publicado (output=csv) ===
-const CSV_URL = https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv
-// ===============================================
+// 👉 PONÉ ACÁ tu CSV publicado (termina en output=csv)
+const CSV_URL = "TU_URL_DE_GOOGLE_SHEETS_AQUI";
 
-const STOP = new Set([
-  "hola","buenas","buenos","dias","tardes","noches",
-  "necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta",
-  "un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del",
-  "estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa",
-  "avenida","av","sobre","altura","calle"
-]);
-
+// Utilidades
+const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa","avenida","av","sobre","altura","calle"]);
 const ACTION_TOKENS = new Set(["almorzar","almuerzo","comer","cenar","cena","desayunar","desayuno"]);
-const INTENT2RUBROS = {
-  "almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],
-  "cenar":["gastronom"],"cena":["gastronom"],"desayunar":["gastronom"],"desayuno":["gastronom"],
-  "clavos":["ferreter"],"tornillos":["ferreter"],"ferreteria":["ferreter"],
-  "libros":["librer"],"resma":["librer"],"papel":["librer"],"a4":["librer"],
-  "flores":["florer"],"flor":["florer"]
-};
-
+const INTENT2RUBROS = {"almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],"cenar":["gastronom"],"cena":["gastronom"],"desayunar":["gastronom"],"desayuno":["gastronom"],"clavos":["ferreter"],"tornillos":["ferreter"],"ferreteria":["ferreter"],"libros":["librer"],"resma":["librer"],"papel":["librer"],"a4":["librer"],"flores":["florer"],"flor":["florer"]};
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
-
 function parseCSV(txt){
   const rows = txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head = rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
-
-// claves tolerantes
 const keyNorm = k => (k||"").toLowerCase().replace(/[^a-z]/g,"");
 function getField(obj, target){ const want=keyNorm(target); for(const k of Object.keys(obj)){ if(keyNorm(k)===want) return obj[k]; } }
-
-// coords robustas
-function parseCoordRaw(v) {
-  if (v == null) return NaN;
-  let s = String(v).trim().replace(',', '.');
-  if (!s) return NaN;
-  let n = Number(s);
-  if (Number.isNaN(n)) {
-    const neg = s.trim().startsWith('-');
-    const digits = s.replace(/[^0-9]/g,'');
-    if (digits.length >= 7) { n = parseInt(digits,10) / 1e6; if(neg) n = -Math.abs(n); }
-    else if (/^\-?\d+$/.test(s)) { n = parseInt(s,10); }
-    else {
-      const firstDot = s.indexOf('.');
-      if (firstDot>0){
-        const kept = s.slice(0, firstDot+1) + s.slice(firstDot+1).replace(/\.\./g,'.').replace(/\./g,'');
-        n = Number(kept);
-      }
-    }
+function parseCoordRaw(v){ if(v==null) return NaN; let s=String(v).trim().replace(',', '.'); if(!s) return NaN; let n=Number(s);
+  if(Number.isNaN(n)){ const neg=s.trim().startsWith('-'); const digits=s.replace(/[^0-9]/g,'');
+    if(digits.length>=7){ n=parseInt(digits,10)/1e6; if(neg) n=-Math.abs(n); }
+    else if(/^\-?\d+$/.test(s)){ n=parseInt(s,10); }
+    else { const firstDot=s.indexOf('.'); if(firstDot>0){ const kept=s.slice(0,firstDot+1)+s.slice(firstDot+1).replace(/\./g,''); n=Number(kept);} }
   }
-  if (Math.abs(n) > 180) n = n / 1e6;
-  return n;
+  if(Math.abs(n)>180) n=n/1e6; return n;
 }
-function parseLat(v){ const n=parseCoordRaw(v); return Math.abs(n)<=90 ? n : NaN; }
-function parseLng(v){ const n=parseCoordRaw(v); return Math.abs(n)<=180 ? n : NaN; }
+function parseLat(v){const n=parseCoordRaw(v);return Math.abs(n)<=90?n:NaN;}
+function parseLng(v){const n=parseCoordRaw(v);return Math.abs(n)<=180?n:NaN;}
+function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
 
-// Haversine
-let USER_POS = null;
-function haversineKm(a, b){
-  const R=6371, toRad=x=>x*Math.PI/180;
-  const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
-  const s1=Math.sin(dLat/2), s2=Math.sin(dLng/2);
-  const A = s1*s1 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
-  return 2*R*Math.asin(Math.min(1, Math.sqrt(A)));
-}
-
-// entender frase + fallback de zona si el texto "parece lugar"
 function understand(raw){
   const t0=(raw||"").trim(), t=norm(t0);
   let zona="", qText=t0;
-
-  // “estoy en <zona> y ...”
-  let m = t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // “en|por|de|sobre <zona> ...”
-  if(!m) m = t.match(/(?:^|\s)(?:en|por|de|sobre)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // “<verbo> en|por|sobre <zona>”
-  if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?(?:en|por|sobre)\s+([a-záéíóúñ\s]+)$/i);
-  // “cerca de <zona>”
-  if(!m) m = t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
-
-  if(m){
-    zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" ");
-    qText=t0.replace(new RegExp(m[0],'i'),'').trim();
-  } else {
-    // 👇 Fallback: si la frase es corta y parece un lugar, tomarla como zona
-    const words = t.split(/\s+/).filter(Boolean);
-    const looksLikePlace = words.length>0 && words.length<=4 && (t.includes(' y ') || words.length<=3);
-    if(looksLikePlace){ zona=t0.trim(); qText=""; }
-  }
-
-  qText=qText
-    .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
-    .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
-    .replace(/^(?:busc\w*|necesit\w*|quiero)\b[\s,]*/i,"")
-    .replace(/^de\s+/i,"").trim();
-
+  let m=t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  if(!m) m=t.match(/(?:^|\s)(?:en|por|de|sobre)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  if(!m) m=t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?(?:en|por|sobre)\s+([a-záéíóúñ\s]+)$/i);
+  if(!m) m=t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
+  if(m){ zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" "); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
+  else { const words=t.split(/\s+/).filter(Boolean); const looksLikePlace=words.length>0 && words.length<=4 && (t.includes(' y ')||words.length<=3); if(looksLikePlace){ zona=t0.trim(); qText=""; } }
+  qText=qText.replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"").replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"").replace(/^(?:busc\w*|necesit\w*|quiero)\b[\s,]*/i,"").replace(/^de\s+/i,"").trim();
   return {q:qText,z:zona};
 }
-
-// rubros deseados
-function desiredRubros(tokens){
-  const wants=new Set();
-  for(const t of tokens){ const rs=INTENT2RUBROS[t]; if(rs) rs.forEach(r=>wants.add(r)); }
-  return wants;
-}
-
-// zona
-function locationMatch(row, zona){
+function desiredRubros(tokens){ const wants=new Set(); for(const t of tokens){ const rs=INTENT2RUBROS[t]; if(rs) rs.forEach(r=>wants.add(r)); } return wants; }
+function locationMatch(row,zona){
   if(!zona) return true;
   const zt=toks(zona), tb=toks(row.barrio||""), td=toks(row.direccion||"");
-  for(const z of zt){ if(tb.includes(z) || td.includes(z)) return true; }
+  for(const z of zt){ if(tb.includes(z)||td.includes(z)) return true; }
   const nb=norm(row.barrio||""), nd=norm(row.direccion||""), nz=norm(zona);
-  return nb.includes(nz) || nd.includes(nz) || nz.includes(nb) || nz.includes(nd);
+  return nb.includes(nz)||nd.includes(nz)||nz.includes(nb)||nz.includes(nd);
 }
 
-let DATA=[];
-fetch(CSV_URL).then(r=>r.text()).then(t=>{ DATA=parseCSV(t); });
+let DATA=[], USER_POS=null;
+(async function load(){
+  try{
+    const r=await fetch(CSV_URL,{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const txt=await r.text();
+    DATA=parseCSV(txt);
+    console.log('CSV cargado. Filas:', DATA.length);
+  }catch(e){
+    console.error('Error cargando CSV:', e);
+    alert('No pude cargar la base (CSV). Revisá el link publicado.');
+  }
+})();
 
 document.getElementById('goBtn').addEventListener('click', buscar);
 document.getElementById('clearBtn').addEventListener('click', ()=>{ document.getElementById('qall').value=""; document.getElementById('results').innerHTML=""; document.getElementById('chips').innerHTML=""; });
-document.getElementById('cpyBtn').addEventListener('click', ()=>{
-  const inp=document.getElementById('qall').value.trim();
-  const u=new URL(location.href);
-  if(inp) u.searchParams.set('t', inp); else u.searchParams.delete('t');
-  navigator.clipboard.writeText(u.toString()).then(()=>alert('Link copiado'));
-});
+document.getElementById('cpyBtn').addEventListener('click', ()=>{ const inp=document.getElementById('qall').value.trim(); const u=new URL(location.href); if(inp) u.searchParams.set('t', inp); else u.searchParams.delete('t'); navigator.clipboard.writeText(u.toString()).then(()=>alert('Link copiado')); });
 document.getElementById('qall').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); buscar(); }});
-document.getElementById('locBtn').addEventListener('click', ()=>{
-  if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
+document.getElementById('locBtn').addEventListener('click', ()=>{ if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
   navigator.geolocation.getCurrentPosition(
     pos=>{ USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude}; document.getElementById('gpsHint').style.display='block'; buscar(); },
     err=>{ alert('No pude obtener tu ubicación. Permití el acceso al GPS.'); },
@@ -189,56 +125,35 @@ document.getElementById('locBtn').addEventListener('click', ()=>{
 });
 
 function buscar(){
-  const raw=document.getElementById('qall').value;
-  const {q,z}=understand(raw);
-  document.getElementById('chips').innerHTML=[
-    z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
-    q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:''
-  ].join('');
-  render(buscarInterno(q,z));
+  try{
+    const raw=document.getElementById('qall').value;
+    const {q,z}=understand(raw);
+    document.getElementById('chips').innerHTML=[ z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'', q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:'' ].join('');
+    render(buscarInterno(q,z));
+  }catch(e){ console.error('Error en buscar():', e); alert('Hubo un error al procesar la búsqueda.'); }
 }
 
 function buscarInterno(q,z){
-  const qt=toks(q);
-  const wants = desiredRubros(qt);
-  const hasAction = qt.some(t=>ACTION_TOKENS.has(t));
-  const noIntent = qt.length===0;
-
+  const qt=toks(q), wants=desiredRubros(qt), hasAction=qt.some(t=>ACTION_TOKENS.has(t)), noIntent=qt.length===0;
   return DATA.map(l=>{
-      const rubroNorm = norm(l.rubro||"");
-      const blobIntent = norm((l.rubro||"")+" "+(l.keywords||"")); // solo rubro+keywords
-      let score = 0;
+    const rubroNorm=norm(l.rubro||""), blobIntent=norm((l.rubro||"")+" "+(l.keywords||""));
+    let score=0;
 
-      if(wants.size){
-        let ok=false;
-        for(const w of wants){ if(rubroNorm.includes(w)) { ok=true; break; } }
-        if(!ok && hasAction){
-          const verbs = qt.filter(t=>ACTION_TOKENS.has(t));
-          if(verbs.some(v=>blobIntent.includes(v))) ok=true;
-        }
-        if(!ok) score=-1;
-      }
+    if(wants.size){
+      let ok=false;
+      for(const w of wants){ if(rubroNorm.includes(w)) { ok=true; break; } }
+      if(!ok && hasAction){ const verbs=qt.filter(t=>ACTION_TOKENS.has(t)); if(verbs.some(v=>blobIntent.includes(v))) ok=true; }
+      if(!ok) score=-1;
+    }
+    if(score>=0){ qt.forEach(t=>{ if(blobIntent.includes(t)) score+=1; }); }
+    if(score>=0 && z && !locationMatch(l,z)) score=-1;
 
-      if(score>=0){ qt.forEach(t=>{ if(blobIntent.includes(t)) score += 1; }); }
-
-      if(score>=0 && z && !locationMatch(l,z)) score = -1;
-
-      const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
-      let distKm=null;
-      if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
-        distKm=haversineKm(USER_POS,{lat,lng});
-        const bonus=Math.max(0, 2 - (distKm/1.5));
-        score+=bonus;
-      }
-
-      if(score===0 && noIntent && (z || USER_POS)) score=0.1;
-
-      return { l:{...l,_distKm:distKm,_plat:lat,_plng:lng}, score };
-    })
-    .filter(x=>x.score>0)
-    .sort((a,b)=>b.score-a.score)
-    .slice(0,12)
-    .map(x=>x.l);
+    const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
+    let distKm=null;
+    if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){ distKm=haversineKm(USER_POS,{lat,lng}); const bonus=Math.max(0,2-(distKm/1.5)); score+=bonus; }
+    if(score===0 && noIntent && (z||USER_POS)) score=0.1;
+    return { l:{...l,_distKm:distKm,_plat:lat,_plng:lng}, score };
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(x=>x.l);
 }
 
 function render(items){
@@ -265,19 +180,20 @@ function render(items){
   }).join("");
 }
 
-// Mic
+// Mic con guardas
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){btn.disabled=true;btn.innerText='🎤—';btn.title='Dictado no disponible.';return;}
   const rec=new SR(); rec.lang='es-AR'; rec.interimResults=false; rec.maxAlternatives=1;
-  btn.addEventListener('click',()=>{ try{rec.start();btn.innerText='⏺️';}catch(e){} });
-  rec.onresult=e=>{ const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); };
+  btn.addEventListener('click',()=>{ try{rec.start();btn.innerText='⏺️';}catch(e){ console.warn('Mic start:',e);} });
+  rec.onresult=e=>{ try{ const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); }catch(err){ console.error('Mic result:',err); } };
   rec.onend=()=>{ btn.innerText='🎤'; };
-  rec.onerror=()=>{ btn.innerText='🎤'; };
+  rec.onerror=e=>{ console.error('Mic error:',e); btn.innerText='🎤'; };
 })();
 </script>
 </body>
 </html>
+
 
 
