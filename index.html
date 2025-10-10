@@ -1,82 +1,83 @@
 
 <!doctype html>
 <html lang="es">
->
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (versión frases naturales)</title>
+<title>Aquí Nomás — Demo (frases naturales v2)</title>
 <style>
-  :root{--pri:#0b5cff;}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
-  .wrap{max-width:860px;margin:0 auto;padding:18px}
-  h1{font-size:20px;margin:0 0 14px}
-  .box{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:14px;margin:0 0 14px}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  .input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #cfd6e0;border-radius:12px;font-size:15px}
-  .btn{padding:12px 14px;border-radius:12px;border:1px solid var(--pri);background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
-  .btn.secondary{background:#fff;color:var(--pri)}
-  .btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
-  .btn.mic{border:1px dashed var(--pri);background:#eef3ff}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-  .chip{background:#eef3ff;border:1px solid #d7e3ff;color:#153a9b;padding:6px 10px;border-radius:999px;font-size:12px}
-  .chip strong{font-weight:700;margin-right:4px}
-  .tiny{font-size:12px;color:#667}
-  .card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0}
-  .title{font-weight:700;margin-bottom:4px}
-  .title span{font-weight:600;color:#555}
-  .promo{margin:6px 0 10px;color:var(--pri)}
-  .empty{padding:12px;color:#666}
+:root{--pri:#0b5cff;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
+.wrap{max-width:860px;margin:0 auto;padding:18px}
+h1{font-size:20px;margin:0 0 14px}
+.box{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:14px;margin:0 0 14px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #cfd6e0;border-radius:12px;font-size:15px}
+.btn{padding:12px 14px;border-radius:12px;border:1px solid var(--pri);background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
+.btn.secondary{background:#fff;color:var(--pri)}
+.btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
+.btn.mic{border:1px dashed var(--pri);background:#eef3ff}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{background:#eef3ff;border:1px solid #d7e3ff;color:#153a9b;padding:6px 10px;border-radius:999px;font-size:12px}
+.chip strong{font-weight:700;margin-right:4px}
+.tiny{font-size:12px;color:#667}
+.card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0}
+.title{font-weight:700;margin-bottom:4px}
+.title span{font-weight:600;color:#555}
+.promo{margin:6px 0 10px;color:var(--pri)}
+.empty{padding:12px;color:#666}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (frases naturales)</h1>
+<h1>🏷️ Aquí Nomás — demo (frases naturales v2)</h1>
 
-  <div class="box">
-    <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en el centro y quiero almorzar'" />
-      <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
-      <button id="goBtn" class="btn">Buscar</button>
-      <button id="clearBtn" class="btn ghost">Limpiar</button>
-      <button id="cpyBtn" class="btn secondary">Copiar link</button>
-    </div>
-    <div class="chips" id="chips"></div>
-    <div class="tiny" style="margin-top:8px">
-      Probá decir o escribir frases naturales como:  
-      <em>“estoy en el centro y quiero almorzar”</em> o  
-      <em>“almorzar en Devoto”</em>.
-    </div>
-  </div>
+<div class="box">
+<div class="row">
+<input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos'" />
+<button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
+<button id="goBtn" class="btn">Buscar</button>
+<button id="clearBtn" class="btn ghost">Limpiar</button>
+<button id="cpyBtn" class="btn secondary">Copiar link</button>
+</div>
+<div class="chips" id="chips"></div>
+<div class="tiny" style="margin-top:8px">
+Podés decir o escribir frases naturales como:<br>
+<em>“estoy en Devoto y necesito clavos”</em> o <em>“almorzar en el centro”</em>.
+</div>
+</div>
 
-  <div id="results" class="box"></div>
+<div id="results" class="box"></div>
 </div>
 
 <script>
-// === PEGÁ ACÁ TU LINK PUBLICADO (Google Sheets → “Publicar en la web”, termina en output=csv)
+// === pegá acá tu link de google sheets publicado ===
 const CSV_URL =  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
-// ===============================================================================
+// ===============================================
 
-// Stopwords
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
 const RUBRO = {"resma":"Librería","papel":"Librería","hojas":"Librería","a4":"Librería","libros":"Librería","clavos":"Ferretería","tornillos":"Ferretería","flor":"Florería","flores":"Florería"};
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t));}
 function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
 
-// —— interpretador flexible de frases —— 
+// —— interpretador flexible —— 
 function understand(raw){
-  const t0=(raw||"").trim(); const t=norm(t0);
+  const t0=(raw||"").trim();
+  const t=norm(t0);
   let zona="", qText=t0;
 
-  // 1. "estoy en / vivo en / me encuentro en ..." + lo que venga hasta verbos comunes
-  let m=t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+(.+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // 2. o "en|por|de <zona>" seguido de "y quiero" u otras acciones
-  if(!m) m=t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)|[,.!?]|$))/i);
-  // 3. o al final de la frase: "almorzar en devoto"
+  // 1. “estoy en devoto y necesito clavos”
+  let m=t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*y\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)|[,.!?]|$)/i);
+  // 2. “en devoto necesito clavos”
+  if(!m) m=t.match(/(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)|[,.!?]|$)/i);
+  // 3. “almorzar en devoto”
   if(!m) m=t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
 
-  if(m){zona=m[1].trim().split(/\s+/).slice(0,4).join(" ");qText=t0.replace(new RegExp(m[0],'i'),'').trim();}
+  if(m){
+    zona=m[1].trim().split(/\s+/).slice(0,4).join(" ");
+    qText=t0.replace(new RegExp(m[0],'i'),'').trim();
+  }
 
   qText=qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
@@ -145,7 +146,7 @@ function limpiar(){
   document.getElementById('results').innerHTML="";
 }
 
-// Micrófono simple
+// micrófono simple
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -159,3 +160,15 @@ function limpiar(){
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
