@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (intención estricta + zona por/ sobre)</title>
+<title>Aquí Nomás — Demo (fallback de zona)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,11 +30,11 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (intención estricta + zona por/sobre)</h1>
+  <h1>🏷️ Aquí Nomás — demo (fallback de zona)</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar por avenida Santa Fe'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'santa fe', 'santa fe y laprida', 'almorzar en el centro'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -50,7 +50,7 @@ h1{font-size:20px;margin:0 0 14px}
 
 <script>
 // === tu Google Sheets publicado (output=csv) ===
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+const CSV_URL = https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv
 // ===============================================
 
 const STOP = new Set([
@@ -97,7 +97,7 @@ function parseCoordRaw(v) {
     else {
       const firstDot = s.indexOf('.');
       if (firstDot>0){
-        const kept = s.slice(0, firstDot+1) + s.slice(firstDot+1).replace(/\./g,'');
+        const kept = s.slice(0, firstDot+1) + s.slice(firstDot+1).replace(/\.\./g,'.').replace(/\./g,'');
         n = Number(kept);
       }
     }
@@ -118,7 +118,7 @@ function haversineKm(a, b){
   return 2*R*Math.asin(Math.min(1, Math.sqrt(A)));
 }
 
-// entender frase (ahora capta “<verbo> en/por/sobre <zona>”)
+// entender frase + fallback de zona si el texto "parece lugar"
 function understand(raw){
   const t0=(raw||"").trim(), t=norm(t0);
   let zona="", qText=t0;
@@ -132,7 +132,15 @@ function understand(raw){
   // “cerca de <zona>”
   if(!m) m = t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
 
-  if(m){ zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" "); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
+  if(m){
+    zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" ");
+    qText=t0.replace(new RegExp(m[0],'i'),'').trim();
+  } else {
+    // 👇 Fallback: si la frase es corta y parece un lugar, tomarla como zona
+    const words = t.split(/\s+/).filter(Boolean);
+    const looksLikePlace = words.length>0 && words.length<=4 && (t.includes(' y ') || words.length<=3);
+    if(looksLikePlace){ zona=t0.trim(); qText=""; }
+  }
 
   qText=qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
@@ -143,7 +151,7 @@ function understand(raw){
   return {q:qText,z:zona};
 }
 
-// rubros deseados desde los tokens
+// rubros deseados
 function desiredRubros(tokens){
   const wants=new Set();
   for(const t of tokens){ const rs=INTENT2RUBROS[t]; if(rs) rs.forEach(r=>wants.add(r)); }
@@ -201,12 +209,9 @@ function buscarInterno(q,z){
       const blobIntent = norm((l.rubro||"")+" "+(l.keywords||"")); // solo rubro+keywords
       let score = 0;
 
-      // 1) si hay intención: exigir rubro compatible o keywords que contengan el verbo de acción
       if(wants.size){
         let ok=false;
-        // a) rubro compatible
         for(const w of wants){ if(rubroNorm.includes(w)) { ok=true; break; } }
-        // b) si hay verbo (almorzar/comer/...), keywords deben contenerlo
         if(!ok && hasAction){
           const verbs = qt.filter(t=>ACTION_TOKENS.has(t));
           if(verbs.some(v=>blobIntent.includes(v))) ok=true;
@@ -214,13 +219,10 @@ function buscarInterno(q,z){
         if(!ok) score=-1;
       }
 
-      // 2) score por tokens solo contra rubro+keywords
       if(score>=0){ qt.forEach(t=>{ if(blobIntent.includes(t)) score += 1; }); }
 
-      // 3) filtro zona
       if(score>=0 && z && !locationMatch(l,z)) score = -1;
 
-      // 4) bonus cercanía
       const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
       let distKm=null;
       if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
@@ -229,7 +231,6 @@ function buscarInterno(q,z){
         score+=bonus;
       }
 
-      // 5) sin intención pero con zona o GPS: dejar pasar mínimo
       if(score===0 && noIntent && (z || USER_POS)) score=0.1;
 
       return { l:{...l,_distKm:distKm,_plat:lat,_plng:lng}, score };
@@ -278,4 +279,5 @@ function render(items){
 </script>
 </body>
 </html>
+
 
