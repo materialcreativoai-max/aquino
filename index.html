@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (GPS + cercanía)</title>
+<title>Aquí Nomás — Demo (GPS automático)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (GPS + cercanía)</h1>
+  <h1>🏷️ Aquí Nomás — demo (GPS automático)</h1>
 
   <div class="box">
     <div class="row">
@@ -43,7 +43,7 @@ h1{font-size:20px;margin:0 0 14px}
     </div>
     <div class="chips" id="chips"></div>
     <div class="tiny" style="margin-top:8px">
-      Consejito: tocá 📍 para priorizar lo que te queda más cerca. Enter también busca.
+      Si no escribís nada y tocás 📍, te muestra lo más cerca según tu GPS.
     </div>
   </div>
 
@@ -53,11 +53,8 @@ h1{font-size:20px;margin:0 0 14px}
 <script>
 // === pegá acá tu link de google sheets publicado (termina en output=csv) ===
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
-
-
 // ==========================================================================
 
-// Stopwords / muletillas
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
@@ -84,13 +81,9 @@ function understand(raw){
   const t  = norm(t0);
   let zona="", qText=t0;
 
-  // 1) “estoy en devoto (y) necesito/clavos…”
   let m = t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // 2) “en|por|de devoto necesito/quiero…”
   if(!m) m = t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // 3) “almorzar en devoto”
   if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
-  // 4) “cerca de almagro”
   if(!m) m = t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
 
   if(m){
@@ -98,7 +91,6 @@ function understand(raw){
     qText = t0.replace(new RegExp(m[0],'i'), '').trim();
   }
 
-  // limpiar muletillas
   qText = qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
     .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
@@ -139,11 +131,15 @@ document.getElementById('qall').addEventListener('keydown', e=>{
   if(e.key==='Enter'){ e.preventDefault(); buscar(); }
 });
 
-// botón GPS
+// 📍 botón GPS — ahora lanza búsqueda automática
 document.getElementById('locBtn').addEventListener('click', ()=>{
   if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
   navigator.geolocation.getCurrentPosition(
-    pos => { USER_POS = { lat: pos.coords.latitude, lng: pos.coords.longitude }; alert('Ubicación tomada. Ya priorizamos lo más cerca.'); },
+    pos => { 
+      USER_POS = { lat: pos.coords.latitude, lng: pos.coords.longitude }; 
+      alert('Ubicación tomada. Mostrando lo más cerca.'); 
+      buscar(); // 👉 dispara búsqueda automática
+    },
     err => { alert('No pude obtener tu ubicación. Permití el acceso al GPS.'); },
     { enableHighAccuracy:true, timeout:8000, maximumAge:0 }
   );
@@ -165,18 +161,13 @@ function buscarInterno(q,z){
       const blob = norm(Object.values(l).join(" "));
       let score = 0;
 
-      // score por intención (coincidencia cruda)
       qt.forEach(t=>{ if(blob.includes(t)) score += 1; });
-
-      // filtro por zona escrita (si vino)
       if(z && !locationMatch(l,z)) score = -1;
 
-      // bonus por cercanía (si tenemos coords de ambos lados)
       const lat = parseFloat(l.lat), lng = parseFloat(l.lng);
       let distKm = null;
       if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
-        distKm = haversineKm(USER_POS, {lat, lng}); // km
-        // bonus inverso: a 0 km suma ~2 pts; cae lineal hasta 0 a 3 km
+        distKm = haversineKm(USER_POS, {lat, lng});
         const bonus = Math.max(0, 2 - (distKm/1.5));
         score += bonus;
       }
@@ -236,15 +227,6 @@ function limpiar(){
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
 
 
 
