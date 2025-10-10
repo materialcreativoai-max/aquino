@@ -1,10 +1,11 @@
 
 <!doctype html>
 <html lang="es">
+>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (1 input)</title>
+<title>Aquí Nomás — Demo (versión frases naturales)</title>
 <style>
   :root{--pri:#0b5cff;}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -26,198 +27,135 @@
   .title span{font-weight:600;color:#555}
   .promo{margin:6px 0 10px;color:var(--pri)}
   .empty{padding:12px;color:#666}
-  pre.debug{white-space:pre-wrap;background:#fff;border:1px solid #e6e9ee;border-radius:12px;padding:12px;margin-top:8px;font-size:12px;color:#333;display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (1 input)</h1>
+  <h1>🏷️ Aquí Nomás — demo (frases naturales)</h1>
 
   <div class="box">
     <div class="row">
-     <input id="qall" class="input" autofocus placeholder="Contame qué necesitás (ej: 'hola, estoy en almagro y busco resma A4')" />
+      <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en el centro y quiero almorzar'" />
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
       <button id="cpyBtn" class="btn secondary">Copiar link</button>
-      <button id="dbgBtn" class="btn secondary">🧪 Debug</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" style="margin-top:8px">Ejemplo: <em>“hola, estoy en villa devoto y necesito clavos”</em> o <em>“resma a4 en almagro”</em>. Enter también busca.</div>
+    <div class="tiny" style="margin-top:8px">
+      Probá decir o escribir frases naturales como:  
+      <em>“estoy en el centro y quiero almorzar”</em> o  
+      <em>“almorzar en Devoto”</em>.
+    </div>
   </div>
 
   <div id="results" class="box"></div>
-  <pre id="debug" class="debug"></pre>
 </div>
 
 <script>
 // === PEGÁ ACÁ TU LINK PUBLICADO (Google Sheets → “Publicar en la web”, termina en output=csv)
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv"
+const CSV_URL =  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
 // ===============================================================================
 
-// Stopwords / muletillas
+// Stopwords
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
-
-// Sinónimos → rubro
-const RUBRO = {"resma":"Librería","papel":"Librería","hojas":"Librería","a4":"Librería","libreria":"Librería","libros":"Librería","clavo":"Ferretería","clavos":"Ferretería","tornillo":"Ferretería","tornillos":"Ferretería","destornillador":"Ferretería","mecha":"Ferretería","ferreteria":"Ferretería","flor":"Florería","flores":"Florería","floreria":"Florería","ramos":"Florería"};
-
+const RUBRO = {"resma":"Librería","papel":"Librería","hojas":"Librería","a4":"Librería","libros":"Librería","clavos":"Ferretería","tornillos":"Ferretería","flor":"Florería","flores":"Florería"};
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
-function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
-function parseCSV(txt){
-  const rows = txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
-  const head = rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
-  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
-}
+function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t));}
+function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
 
-// Analiza UNA frase y devuelve {q,z}
+// —— interpretador flexible de frases —— 
 function understand(raw){
-  const t0 = (raw||"").trim();
-  const t = norm(t0);
+  const t0=(raw||"").trim(); const t=norm(t0);
+  let zona="", qText=t0;
 
-  // primero "estoy en <zona...>"
-  let m = t.match(/estoy\s+en\s+(.+?)(?=\s+(?:busc\w*|necesit\w*|quiero)\b|[,.!?]|$)/i);
-  // o "en|por|de <zona...>"
-  if(!m) m = t.match(/(?:^|\s)(?:en|por|de)\s+(.+?)(?=\s+(?:busc\w*|necesit\w*|quiero)\b|[,.!?]|$)/i);
+  // 1. "estoy en / vivo en / me encuentro en ..." + lo que venga hasta verbos comunes
+  let m=t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+(.+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  // 2. o "en|por|de <zona>" seguido de "y quiero" u otras acciones
+  if(!m) m=t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)|[,.!?]|$))/i);
+  // 3. o al final de la frase: "almorzar en devoto"
+  if(!m) m=t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
 
-  let zona = "", qText = t0;
-  if(m){
-    zona = m[1].trim().split(/\s+/).slice(0,4).join(" ");
-    qText = t0.replace(new RegExp(m[0], 'i'), '').trim();
-  }
+  if(m){zona=m[1].trim().split(/\s+/).slice(0,4).join(" ");qText=t0.replace(new RegExp(m[0],'i'),'').trim();}
 
-  // limpieza de muletillas al inicio, y “de …” inicial
-  qText = qText
+  qText=qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
-    .replace(/^(?:estoy|estamos)\b[\s,]*/i,"")
-    .replace(/^(?:busc\w*|necesit\w*|quiero)\b[\s,]*/i,"")
-    .replace(/^de\s+/i,"")
-    .trim();
+    .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
+    .replace(/^(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b[\s,]*/i,"")
+    .replace(/^de\s+/i,"").trim();
 
-  return { q:qText, z:zona };
+  return {q:qText,z:zona};
 }
 
-let DATA=[], DEBUG=false;
+let DATA=[];
+fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);});
 
-// Carga CSV y estado inicial (?t=)
-fetch(CSV_URL).then(r=>r.text()).then(t=>{
-  DATA = parseCSV(t);
-  const u = new URL(location.href);
-  const t0 = u.searchParams.get('t') || localStorage.getItem('t') || '';
-  if(t0){ document.getElementById('qall').value = t0; buscar(); }
-}).catch(()=>{
-  document.getElementById('results').innerHTML = '<div class="empty">No pude leer la hoja. Verificá que el CSV esté publicado y termine en <code>output=csv</code>.</div>';
-});
-
-// Botones
-document.getElementById('goBtn').addEventListener('click', buscar);
-document.getElementById('clearBtn').addEventListener('click', limpiar);
-document.getElementById('dbgBtn').addEventListener('click', ()=>{
-  DEBUG=!DEBUG;
-  document.getElementById('debug').style.display = DEBUG?'block':'none';
-  if(DEBUG) buscar();
-});
-document.getElementById('cpyBtn').addEventListener('click', ()=>{
-  const inp = document.getElementById('qall').value.trim();
-  const u = new URL(location.href);
-  if(inp) u.searchParams.set('t', inp); else u.searchParams.delete('t');
+document.getElementById('goBtn').addEventListener('click',buscar);
+document.getElementById('clearBtn').addEventListener('click',limpiar);
+document.getElementById('cpyBtn').addEventListener('click',()=>{
+  const inp=document.getElementById('qall').value.trim();
+  const u=new URL(location.href);
+  if(inp)u.searchParams.set('t',inp);else u.searchParams.delete('t');
   navigator.clipboard.writeText(u.toString()).then(()=>alert('Link copiado'));
 });
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 
-// ENTER para buscar
-document.getElementById('qall').addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter'){ e.preventDefault(); buscar(); }
-});
-
-// Buscar (desde 1 input)
 function buscar(){
-  const raw = document.getElementById('qall').value;
-  localStorage.setItem('t', raw);
-  const {q,z} = understand(raw);
-
-  // Chips de lo que entendimos
-  const chips = document.getElementById('chips');
-  chips.innerHTML = [
-    z ? `<div class="chip"><strong>Zona:</strong> ${z}</div>` : '',
-    q ? `<div class="chip"><strong>Intención:</strong> ${q}</div>` : ''
+  const raw=document.getElementById('qall').value;
+  const {q,z}=understand(raw);
+  document.getElementById('chips').innerHTML=[
+    z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
+    q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:''
   ].join('');
-
-  const out = buscarInterno(q, z);
-  render(out);
-
-  if(DEBUG){
-    const qt = toks(q);
-    const dbg = [`RAW: ${raw}`,`Q: ${q}`,`Z: ${z}`,`TOKENS: ${JSON.stringify(qt)}`].join('\n');
-    document.getElementById('debug').textContent = dbg;
-  }
+  render(buscarInterno(q,z));
 }
 
-function buscarInterno(q, z){
-  const qt = toks(q), zt = norm(z);
-  let rubroDetectado = ""; for(const t of qt){ if(RUBRO[t]){rubroDetectado=RUBRO[t];break;} }
-
+function buscarInterno(q,z){
+  const qt=toks(q),zt=norm(z);
   return DATA.map(l=>{
-      const rub = norm(l.rubro);
-      const blob = norm(`${l.rubro} ${l.keywords} ${l.tags||""}`); // "tags" opcional (autores, marcas)
-      const bar  = norm(l.barrio);
-      let score = 0;
-      if(qt.length===0) score = 1; else qt.forEach(t=>{ if(blob.includes(t)) score++; });
-      if(score===0 && rubroDetectado && rub.includes(norm(rubroDetectado))) score = 1;
-      if(zt && !bar.includes(zt)) score = -1;
-      return { l, score, bar };
-    })
-    .filter(x=>x.score>0)
-    .sort((a,b)=>b.score-a.score)
-    .slice(0,5)
-    .map(x=>x.l);
+    const blob=norm(Object.values(l).join(" "));
+    let score=0;qt.forEach(t=>{if(blob.includes(t))score++;});
+    if(zt && !(l.barrio||"").toLowerCase().includes(zt))score=-1;
+    return{l,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,8).map(x=>x.l);
 }
 
 function render(items){
-  const box = document.getElementById('results');
-  if(!items.length){ box.innerHTML = '<div class="empty">No encontré opciones. Probá con otra palabra o revisá la zona en la frase.</div>'; return; }
-  box.innerHTML = items.map(r=>{
-    const wa   = "https://wa.me/54" + (r.whatsapp||"").replace(/[^0-9]/g,"");
-    const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${r.direccion||''} ${r.barrio||''}`);
-    return `
+  const box=document.getElementById('results');
+  if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
+  box.innerHTML=items.map(r=>{
+    const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null;
+    const maps="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(`${r.direccion||''} ${r.barrio||''}`);
+    return`
       <div class="card">
-        <div class="title">${r.nombre_local} — <span>${r.rubro}</span></div>
-        <div>${r.direccion} (${r.barrio})</div>
-        <div>Horario: ${r.horario||"-"}</div>
-        <div class="promo">${r.promo_texto ? "Promo: "+r.promo_texto : ""}</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <a class="btn" target="_blank" href="${wa}">WhatsApp</a>
+        <div class="title">${r.nombre_local||'(sin nombre)'} — <span>${r.rubro||''}</span></div>
+        <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
+        ${r.horario?`<div>Horario: ${r.horario}</div>`:''}
+        ${r.promo_texto?`<div class="promo">Promo: ${r.promo_texto}</div>`:''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          ${wa?`<a class="btn" target="_blank" href="${wa}">WhatsApp</a>`:''}
           <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
         </div>
-      </div>`;
-  }).join("");
+      </div>`;}).join("");
 }
 
-// Limpiar todo
 function limpiar(){
-  const inp = document.getElementById('qall');
-  inp.value = '';
-  document.getElementById('chips').innerHTML = '';
-  const d = document.getElementById('debug');
-  d.style.display = 'none';
-  d.textContent = '';
-  DEBUG = false;
-  localStorage.removeItem('t');
-  render([]);
+  document.getElementById('qall').value="";
+  document.getElementById('chips').innerHTML="";
+  document.getElementById('results').innerHTML="";
 }
 
-// === Micrófono mínimo (Chrome/Edge). Si no hay soporte, deshabilita el botón. ===
+// Micrófono simple
 (function(){
-  const btn = document.getElementById('micBtn');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){ btn.disabled=true; btn.innerText='🎤—'; btn.title='Dictado no disponible en este navegador.'; return; }
-  const rec = new SR(); rec.lang='es-AR'; rec.interimResults=false; rec.maxAlternatives=1;
-  btn.addEventListener('click', ()=>{
-    try{ rec.start(); btn.innerText='⏺️'; }catch(e){ /* ya escuchando */ }
-  });
-  rec.onresult = (e)=>{ const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); };
-  rec.onend = ()=>{ btn.innerText='🎤'; };
-  rec.onerror = ()=>{ btn.innerText='🎤'; };
+  const btn=document.getElementById('micBtn');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){btn.disabled=true;btn.innerText='🎤—';btn.title='Dictado no disponible.';return;}
+  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.maxAlternatives=1;
+  btn.addEventListener('click',()=>{try{rec.start();btn.innerText='⏺️';}catch(e){}});
+  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar();};
+  rec.onend=()=>{btn.innerText='🎤';};
+  rec.onerror=()=>{btn.innerText='🎤';};
 })();
 </script>
 </body>
 </html>
-
