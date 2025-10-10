@@ -1,9 +1,11 @@
-<!doctype html><!doctype html>
+
+
+<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (GPS robusto)</title>
+<title>Aquí Nomás — Demo (GPS robusto + zona sin intención)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,11 +32,11 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (GPS robusto)</h1>
+  <h1>🏷️ Aquí Nomás — demo (GPS robusto + zona sin intención)</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos' o 'almorzar en el centro'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar en el centro' o 'estoy en Devoto y necesito clavos'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -51,46 +53,56 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-// === pegá acá tu link de google sheets publicado (termina en output=csv) ===
+// === tu Google Sheets publicado (output=csv) ===
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
-// ==========================================================================
+// ==============================================
 
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
 
-// CSV parser
 function parseCSV(txt){
   const rows = txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head = rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
 
-// —— normalización de claves: permite “lat ”, “ lat”, tabs, etc. ——
+// — normalización de claves para tolerar espacios/tabs en headers —
 const keyNorm = k => (k||"").toLowerCase().replace(/[^a-z]/g,"");
-function getField(obj, target){ // target: 'lat' o 'lng'
-  const want = keyNorm(target);
-  for (const k of Object.keys(obj)){
-    if (keyNorm(k) === want) return obj[k];
-  }
-  return undefined;
-}
+function getField(obj, target){ const want = keyNorm(target); for (const k of Object.keys(obj)){ if (keyNorm(k)===want) return obj[k]; } }
 
-// —— intérprete de coordenadas flexible ——
+// —— coords robustas ——
+// Acepta: -34.559221  |  -34559221  |  "-58.382.320"
 function parseCoordRaw(v) {
   if (v == null) return NaN;
-  const s = String(v).trim().replace(',', '.');
+  let s = String(v).trim().replace(',', '.');
   if (!s) return NaN;
   let n = Number(s);
-  if (Number.isNaN(n) && /^\-?\d+$/.test(s)) n = parseInt(s, 10);
-  if (Math.abs(n) > 180) n = n / 1e6; // microgrados → grados
+  if (Number.isNaN(n)) {
+    const neg = s.trim().startsWith('-');
+    const digits = s.replace(/[^0-9]/g,''); // saco todo lo que no es dígito
+    if (digits.length >= 7) { // asumo microgrados
+      n = parseInt(digits,10) / 1e6;
+      if (neg) n = -Math.abs(n);
+    } else if (/^\-?\d+$/.test(s)) {
+      n = parseInt(s,10);
+    } else {
+      // intento quedarme solo con el primer punto válido
+      const firstDot = s.indexOf('.');
+      if (firstDot>0){
+        const kept = s.slice(0, firstDot+1) + s.slice(firstDot+1).replace(/\./g,'');
+        n = Number(kept);
+      }
+    }
+  }
+  if (Math.abs(n) > 180) n = n / 1e6;
   return n;
 }
 function parseLat(v){ const n = parseCoordRaw(v); return Math.abs(n) <= 90 ? n : NaN; }
 function parseLng(v){ const n = parseCoordRaw(v); return Math.abs(n) <= 180 ? n : NaN; }
 
 // ——— Haversine (km) ———
-let USER_POS = null; // {lat, lng}
+let USER_POS = null;
 function haversineKm(a, b){
   const R=6371, toRad=x=>x*Math.PI/180;
   const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
@@ -99,149 +111,131 @@ function haversineKm(a, b){
   return 2*R*Math.asin(Math.min(1, Math.sqrt(A)));
 }
 
-// —— interpretador de frases (zona + intención) —— 
+// —— interpretar frase —— 
 function understand(raw){
-  const t0 = (raw||"").trim();
-  const t  = norm(t0);
+  const t0=(raw||"").trim(), t=norm(t0);
   let zona="", qText=t0;
-
   let m = t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
   if(!m) m = t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
   if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
   if(!m) m = t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
-
-  if(m){
-    zona  = (m[1]||"").trim().split(/\s+/).slice(0,4).join(" ");
-    qText = t0.replace(new RegExp(m[0],'i'), '').trim();
-  }
-
-  qText = qText
+  if(m){ zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" "); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
+  qText=qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
     .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
     .replace(/^(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b[\s,]*/i,"")
-    .replace(/^de\s+/i,"")
-    .trim();
-
-  return { q:qText, z:zona };
+    .replace(/^de\s+/i,"").trim();
+  return {q:qText,z:zona};
 }
 
-// —— match de ubicación (barrios + dirección) ——
+// —— match de zona —— 
 function locationMatch(row, zona){
   if(!zona) return true;
-  const zt = toks(zona);
-  const tb = toks(row.barrio||"");
-  const td = toks(row.direccion||"");
-  for(const z of zt){
-    if(tb.includes(z)) return true;
-    if(td.includes(z)) return true;
-  }
-  const nb = norm(row.barrio||""), nd = norm(row.direccion||""), nz = norm(zona);
-  if(nb.includes(nz) || nd.includes(nz) || nz.includes(nb) || nz.includes(nd)) return true;
-  return false;
+  const zt=toks(zona), tb=toks(row.barrio||""), td=toks(row.direccion||"");
+  for(const z of zt){ if(tb.includes(z)||td.includes(z)) return true; }
+  const nb=norm(row.barrio||""), nd=norm(row.direccion||""), nz=norm(zona);
+  return nb.includes(nz)||nd.includes(nz)||nz.includes(nb)||nz.includes(nd);
 }
 
-let DATA = [];
+let DATA=[];
 fetch(CSV_URL).then(r=>r.text()).then(t=>{
-  DATA = parseCSV(t);
-  // Debug: mostrar la primera fila y cómo detectamos lat/lng
-  if (DATA.length){
-    const first = DATA[0];
-    const rawLat = getField(first,'lat');
-    const rawLng = getField(first,'lng');
+  DATA=parseCSV(t);
+  // Debug inicial
+  if(DATA.length){
+    const first=DATA[0];
     console.log('Primera fila:', first);
-    console.log('lat cruda=', rawLat, '→ parseLat=', parseLat(rawLat));
-    console.log('lng cruda=', rawLng, '→ parseLng=', parseLng(rawLng));
+    console.log('lat cruda=', getField(first,'lat'), '→ parseLat=', parseLat(getField(first,'lat')));
+    console.log('lng cruda=', getField(first,'lng'), '→ parseLng=', parseLng(getField(first,'lng')));
   }
 });
 
-document.getElementById('goBtn').addEventListener('click', buscar);
-document.getElementById('clearBtn').addEventListener('click', limpiar);
-document.getElementById('cpyBtn').addEventListener('click', ()=>{
-  const inp = document.getElementById('qall').value.trim();
-  const u = new URL(location.href);
-  if(inp) u.searchParams.set('t', inp); else u.searchParams.delete('t');
+document.getElementById('goBtn').addEventListener('click',buscar);
+document.getElementById('clearBtn').addEventListener('click',limpiar);
+document.getElementById('cpyBtn').addEventListener('click',()=>{
+  const inp=document.getElementById('qall').value.trim();
+  const u=new URL(location.href);
+  if(inp)u.searchParams.set('t',inp);else u.searchParams.delete('t');
   navigator.clipboard.writeText(u.toString()).then(()=>alert('Link copiado'));
 });
-document.getElementById('qall').addEventListener('keydown', e=>{
-  if(e.key==='Enter'){ e.preventDefault(); buscar(); }
-});
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 
-// 📍 botón GPS — lanza búsqueda automática
-document.getElementById('locBtn').addEventListener('click', ()=>{
+// 📍 GPS
+document.getElementById('locBtn').addEventListener('click',()=>{
   if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
   navigator.geolocation.getCurrentPosition(
-    pos => { 
-      USER_POS = { lat: pos.coords.latitude, lng: pos.coords.longitude }; 
-      document.getElementById('gpsHint').style.display = 'block';
-      alert('Ubicación tomada. Mostrando lo más cerca.'); 
-      buscar(); // 👉 dispara búsqueda automática
-    },
-    err => { alert('No pude obtener tu ubicación. Permití el acceso al GPS.'); },
-    { enableHighAccuracy:true, timeout:8000, maximumAge:0 }
+    pos=>{ USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude}; document.getElementById('gpsHint').style.display='block'; alert('Ubicación tomada. Mostrando lo más cerca.'); buscar(); },
+    err=>{ alert('No pude obtener tu ubicación. Permití el acceso al GPS.'); },
+    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
   );
 });
 
 function buscar(){
-  const raw = document.getElementById('qall').value;
-  const {q,z} = understand(raw);
-  document.getElementById('chips').innerHTML = [
-    z ? `<div class="chip"><strong>Zona:</strong> ${z}</div>` : '',
-    q ? `<div class="chip"><strong>Intención:</strong> ${q}</div>` : ''
+  const raw=document.getElementById('qall').value;
+  const {q,z}=understand(raw);
+  document.getElementById('chips').innerHTML=[
+    z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
+    q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:''
   ].join('');
   render(buscarInterno(q,z));
 }
 
 function buscarInterno(q,z){
-  const qt = toks(q);
+  const qt=toks(q);
+  const noIntent = qt.length===0; // 👈 intención vacía
   return DATA.map(l=>{
-      const blob = norm(Object.values(l).join(" "));
-      let score = 0;
+      const blob=norm(Object.values(l).join(" "));
+      let score=0;
 
-      // intención
-      qt.forEach(t=>{ if(blob.includes(t)) score += 1; });
-      // filtro zona si viene
-      if(z && !locationMatch(l,z)) score = -1;
+      // intención: si hay tokens, suman; si no hay, no penaliza
+      qt.forEach(t=>{ if(blob.includes(t)) score+=1; });
 
-      // — coords robustas (busca claves parecidas a 'lat'/'lng')
-      const rawLat = getField(l,'lat');
-      const rawLng = getField(l,'lng');
-      const lat = parseLat(rawLat), lng = parseLng(rawLng);
+      // si hay zona escrita, exige match
+      const zOk = locationMatch(l,z);
+      if(z && !zOk) score=-1;
 
-      let distKm = null;
+      // coords para cercanía
+      const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
+      let distKm=null;
       if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
-        distKm = haversineKm(USER_POS, {lat, lng});
-        const bonus = Math.max(0, 2 - (distKm/1.5)); // 0–2 pts
-        score += bonus;
+        distKm=haversineKm(USER_POS,{lat,lng});
+        const bonus=Math.max(0,2-(distKm/1.5)); // 0–2
+        score+=bonus;
       }
 
-      return { l:{...l, _distKm: distKm, _plat: lat, _plng: lng }, score };
+      // 👇 si no hay intención pero hay zona o GPS, dejamos pasar con score mínimo
+      if(score===0 && noIntent && (z || USER_POS)) score=0.1;
+
+      return {l:{...l,_distKm:distKm,_plat:lat,_plng:lng},score};
     })
-    .filter(x=>x.score>0)
+    .filter(x=>x.score>0) // ahora zona/GPS sin intención pasa
     .sort((a,b)=>b.score-a.score)
     .slice(0,12)
     .map(x=>x.l);
 }
 
 function render(items){
-  const box = document.getElementById('results');
+  const box=document.getElementById('results');
   if(!items.length){ box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>'; return; }
-  box.innerHTML = items.map(r=>{
+  box.innerHTML=items.map(r=>{
+    // nombre con fallback 👇
+    const name = r.nombre_local || r.nombre || r.local || '(sin nombre)';
+
     const hasCoords = !isNaN(r._plat) && !isNaN(r._plng);
     const dest = hasCoords ? `${r._plat},${r._plng}` : `${r.direccion||''} ${r.barrio||''}`;
     const maps = USER_POS
       ? `https://www.google.com/maps/dir/?api=1&origin=${USER_POS.lat},${USER_POS.lng}&destination=${encodeURIComponent(dest)}&travelmode=walking`
       : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dest)}`;
-    const wa   = r.whatsapp ? ("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")) : null;
+    const wa = r.whatsapp ? ("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")) : null;
     const dist = (typeof r._distKm === 'number') ? `<div class="meta">≈ ${r._distKm.toFixed(2)} km</div>` : '';
 
     return `
       <div class="card">
-        <div class="title">${r.nombre_local||'(sin nombre)'} — <span>${r.rubro||''}</span></div>
+        <div class="title">${name} — <span>${r.rubro||''}</span></div>
         <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
         ${r.horario?`<div>Horario: ${r.horario}</div>`:''}
         ${r.promo_texto?`<div class="promo">Promo: ${r.promo_texto}</div>`:''}
         ${dist}
-        <div style="display:flex;gap:8px;flex-wrap:wrap; margin-top:8px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           ${wa?`<a class="btn" target="_blank" href="${wa}">WhatsApp</a>`:''}
           <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
         </div>
@@ -257,15 +251,16 @@ function limpiar(){
 
 // Micrófono
 (function(){
-  const btn = document.getElementById('micBtn');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn=document.getElementById('micBtn');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ btn.disabled=true; btn.innerText='🎤—'; btn.title='Dictado no disponible.'; return; }
-  const rec = new SR(); rec.lang='es-AR'; rec.interimResults=false; rec.maxAlternatives=1;
-  btn.addEventListener('click', ()=>{ try{ rec.start(); btn.innerText='⏺️'; }catch(e){} });
-  rec.onresult = e => { const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); };
-  rec.onend    = ()=>{ btn.innerText='🎤'; };
-  rec.onerror  = ()=>{ btn.innerText='🎤'; };
+  const rec=new SR(); rec.lang='es-AR'; rec.interimResults=false; rec.maxAlternatives=1;
+  btn.addEventListener('click',()=>{ try{rec.start(); btn.innerText='⏺️';}catch(e){} });
+  rec.onresult=e=>{ const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); };
+  rec.onend=()=>{ btn.innerText='🎤'; };
+  rec.onerror=()=>{ btn.innerText='🎤'; };
 })();
 </script>
 </body>
 </html>
+
