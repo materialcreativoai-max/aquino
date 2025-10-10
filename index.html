@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (Pack A: intersecciones + cerca + fuzzy)</title>
+<title>Aquí Nomás — Demo (GPS + cercanía)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -24,33 +24,40 @@ h1{font-size:20px;margin:0 0 14px}
 .title{font-weight:700;margin-bottom:4px}
 .title span{font-weight:600;color:#555}
 .promo{margin:6px 0 10px;color:var(--pri)}
+.meta{font-size:12px;color:#566}
 .empty{padding:12px;color:#666}
 </style>
 </head>
 <body>
 <div class="wrap">
-<h1>🏷️ Aquí Nomás — demo (intersecciones + cerca + fuzzy)</h1>
+  <h1>🏷️ Aquí Nomás — demo (GPS + cercanía)</h1>
 
-<div class="box">
-  <div class="row">
-    <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos', 'almorzar en el centro', 'ferretería en cabildo y juramento', 'flores cerca de Almagro'"/>
-    <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
-    <button id="goBtn" class="btn">Buscar</button>
-    <button id="clearBtn" class="btn ghost">Limpiar</button>
-    <button id="cpyBtn" class="btn secondary">Copiar link</button>
+  <div class="box">
+    <div class="row">
+      <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos' o 'almorzar en el centro'"/>
+      <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
+      <button id="goBtn" class="btn">Buscar</button>
+      <button id="clearBtn" class="btn ghost">Limpiar</button>
+      <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
+      <button id="cpyBtn" class="btn secondary">Copiar link</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="tiny" style="margin-top:8px">
+      Consejito: tocá 📍 para priorizar lo que te queda más cerca. Enter también busca.
+    </div>
   </div>
-  <div class="chips" id="chips"></div>
-  <div class="tiny" style="margin-top:8px">Enter también busca. El orden de la frase no importa.</div>
-</div>
 
-<div id="results" class="box"></div>
+  <div id="results" class="box"></div>
 </div>
 
 <script>
-// === pegá acá tu link de google sheets publicado ===
+// === pegá acá tu link de google sheets publicado (termina en output=csv) ===
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
-// ===============================================
 
+
+// ==========================================================================
+
+// Stopwords / muletillas
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
@@ -61,31 +68,14 @@ function parseCSV(txt){
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
 
-// ——— fuzzy matching básico (distancia de edición ≤ 1) ———
-function editDist1(a,b){
-  if(a===b) return 0;
-  const la=a.length, lb=b.length;
-  if(Math.abs(la-lb)>1) return 2; // más de 1 diff
-  // sustituir
-  if(la===lb){
-    let dif=0; for(let i=0;i<la;i++){ if(a[i]!==b[i]){ if(++dif>1) return 2; } }
-    return dif;
-  }
-  // insertar/eliminar
-  let i=0,j=0,dif=0;
-  while(i<la && j<lb){
-    if(a[i]===b[j]){i++;j++;continue;}
-    dif++; if(dif>1) return 2;
-    if(la>lb) i++; else j++;
-  }
-  // resto
-  if(i<la || j<lb) dif++;
-  return dif;
-}
-function approxTokenMatch(a,b){ // a contra b
-  if(!a||!b) return false;
-  if(b.includes(a) || a.includes(b)) return true;
-  return editDist1(a,b) <= 1;
+// ——— Haversine (km) ———
+let USER_POS = null; // {lat, lng}
+function haversineKm(a, b){
+  const R=6371, toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
+  const s1=Math.sin(dLat/2), s2=Math.sin(dLng/2);
+  const A = s1*s1 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
+  return 2*R*Math.asin(Math.min(1, Math.sqrt(A)));
 }
 
 // —— interpretador de frases (zona + intención) —— 
@@ -94,26 +84,21 @@ function understand(raw){
   const t  = norm(t0);
   let zona="", qText=t0;
 
-  // “estoy en devoto (y) necesito/clavos…”
+  // 1) “estoy en devoto (y) necesito/clavos…”
   let m = t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // “en|por|de devoto necesito/quiero…”
+  // 2) “en|por|de devoto necesito/quiero…”
   if(!m) m = t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
-  // “almorzar en devoto”
+  // 3) “almorzar en devoto”
   if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
-  // “cerca de almagro”
+  // 4) “cerca de almagro”
   if(!m) m = t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
-  // “cabildo y juramento”, “esquina cabildo y juramento”
-  if(!m) m = t.match(/(?:esquina\s+)?([a-záéíóúñ\s]+)\s+y\s+([a-záéíóúñ\s]+)$/i);
 
   if(m){
-    if(m.length>=3 && m[2]){ zona = (m[1]+" "+m[2]).trim(); }
-    else { zona = (m[1]||"").trim(); }
-    // recortar a 4 palabras
-    zona = zona.split(/\s+/).slice(0,4).join(" ");
+    zona  = (m[1]||"").trim().split(/\s+/).slice(0,4).join(" ");
     qText = t0.replace(new RegExp(m[0],'i'), '').trim();
   }
 
-  // limpiar muletillas al inicio de la intención
+  // limpiar muletillas
   qText = qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
     .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
@@ -124,19 +109,16 @@ function understand(raw){
   return { q:qText, z:zona };
 }
 
-// —— match de ubicación (barrios y dirección, con fuzzy) ——
+// —— match de ubicación (barrios + dirección) ——
 function locationMatch(row, zona){
   if(!zona) return true;
   const zt = toks(zona);
   const tb = toks(row.barrio||"");
   const td = toks(row.direccion||"");
   for(const z of zt){
-    // barrio tokens
-    for(const b of tb){ if(approxTokenMatch(z,b)) return true; }
-    // dirección tokens (calles, etc.)
-    for(const d of td){ if(approxTokenMatch(z,d)) return true; }
+    if(tb.includes(z)) return true;
+    if(td.includes(z)) return true;
   }
-  // includes crudo como backup
   const nb = norm(row.barrio||""), nd = norm(row.direccion||""), nz = norm(zona);
   if(nb.includes(nz) || nd.includes(nz) || nz.includes(nb) || nz.includes(nd)) return true;
   return false;
@@ -157,6 +139,16 @@ document.getElementById('qall').addEventListener('keydown', e=>{
   if(e.key==='Enter'){ e.preventDefault(); buscar(); }
 });
 
+// botón GPS
+document.getElementById('locBtn').addEventListener('click', ()=>{
+  if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => { USER_POS = { lat: pos.coords.latitude, lng: pos.coords.longitude }; alert('Ubicación tomada. Ya priorizamos lo más cerca.'); },
+    err => { alert('No pude obtener tu ubicación. Permití el acceso al GPS.'); },
+    { enableHighAccuracy:true, timeout:8000, maximumAge:0 }
+  );
+});
+
 function buscar(){
   const raw = document.getElementById('qall').value;
   const {q,z} = understand(raw);
@@ -172,22 +164,28 @@ function buscarInterno(q,z){
   return DATA.map(l=>{
       const blob = norm(Object.values(l).join(" "));
       let score = 0;
-      // score por intención
-      qt.forEach(t=>{
-        if(blob.includes(t)) score += 1;
-        else {
-          // fuzzy: si alguna palabra del blob se parece mucho al token, suma medio punto
-          const words = blob.split(/\s+/);
-          for(const w of words){ if(approxTokenMatch(t,w)){ score += 0.5; break; } }
-        }
-      });
-      // filtro de ubicación (barrio o dirección)
+
+      // score por intención (coincidencia cruda)
+      qt.forEach(t=>{ if(blob.includes(t)) score += 1; });
+
+      // filtro por zona escrita (si vino)
       if(z && !locationMatch(l,z)) score = -1;
-      return { l, score };
+
+      // bonus por cercanía (si tenemos coords de ambos lados)
+      const lat = parseFloat(l.lat), lng = parseFloat(l.lng);
+      let distKm = null;
+      if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
+        distKm = haversineKm(USER_POS, {lat, lng}); // km
+        // bonus inverso: a 0 km suma ~2 pts; cae lineal hasta 0 a 3 km
+        const bonus = Math.max(0, 2 - (distKm/1.5));
+        score += bonus;
+      }
+
+      return { l:{...l, _distKm: distKm}, score };
     })
     .filter(x=>x.score>0)
     .sort((a,b)=>b.score-a.score)
-    .slice(0,8)
+    .slice(0,12)
     .map(x=>x.l);
 }
 
@@ -195,15 +193,22 @@ function render(items){
   const box = document.getElementById('results');
   if(!items.length){ box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>'; return; }
   box.innerHTML = items.map(r=>{
+    const hasCoords = r.lat && r.lng && !isNaN(parseFloat(r.lat)) && !isNaN(parseFloat(r.lng));
+    const dest = hasCoords ? `${r.lat},${r.lng}` : `${r.direccion||''} ${r.barrio||''}`;
+    const maps = USER_POS
+      ? `https://www.google.com/maps/dir/?api=1&origin=${USER_POS.lat},${USER_POS.lng}&destination=${encodeURIComponent(dest)}&travelmode=walking`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dest)}`;
     const wa   = r.whatsapp ? ("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")) : null;
-    const maps = "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(`${r.direccion||''} ${r.barrio||''}`);
+    const dist = (typeof r._distKm === 'number') ? `<div class="meta">≈ ${r._distKm.toFixed(2)} km</div>` : '';
+
     return `
       <div class="card">
         <div class="title">${r.nombre_local||'(sin nombre)'} — <span>${r.rubro||''}</span></div>
         <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
         ${r.horario?`<div>Horario: ${r.horario}</div>`:''}
         ${r.promo_texto?`<div class="promo">Promo: ${r.promo_texto}</div>`:''}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        ${dist}
+        <div style="display:flex;gap:8px;flex-wrap:wrap; margin-top:8px;">
           ${wa?`<a class="btn" target="_blank" href="${wa}">WhatsApp</a>`:''}
           <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
         </div>
@@ -217,7 +222,7 @@ function limpiar(){
   document.getElementById('results').innerHTML="";
 }
 
-// micrófono
+// Micrófono
 (function(){
   const btn = document.getElementById('micBtn');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -231,7 +236,6 @@ function limpiar(){
 </script>
 </body>
 </html>
-
 
 
 
