@@ -9,6 +9,17 @@
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
 .wrap{max-width:860px;margin:0 auto;padding:18px}
+
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Aquí Nomás — Demo (frases naturales v3)</title>
+<style>
+:root{--pri:#0b5cff;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
+.wrap{max-width:860px;margin:0 auto;padding:18px}
 h1{font-size:20px;margin:0 0 14px}
 .box{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:14px;margin:0 0 14px}
 .row{display:flex;gap:8px;flex-wrap:wrap}
@@ -30,21 +41,18 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-<h1>🏷️ Aquí Nomás — demo (frases naturales v2)</h1>
+<h1>🏷️ Aquí Nomás — demo (frases naturales v3)</h1>
 
 <div class="box">
-<div class="row">
-<input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos'" />
-<button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
-<button id="goBtn" class="btn">Buscar</button>
-<button id="clearBtn" class="btn ghost">Limpiar</button>
-<button id="cpyBtn" class="btn secondary">Copiar link</button>
-</div>
-<div class="chips" id="chips"></div>
-<div class="tiny" style="margin-top:8px">
-Podés decir o escribir frases naturales como:<br>
-<em>“estoy en Devoto y necesito clavos”</em> o <em>“almorzar en el centro”</em>.
-</div>
+  <div class="row">
+    <input id="qall" class="input" autofocus placeholder="Ej: 'estoy en Devoto y necesito clavos' o 'estoy en el centro y quiero almorzar'"/>
+    <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
+    <button id="goBtn" class="btn">Buscar</button>
+    <button id="clearBtn" class="btn ghost">Limpiar</button>
+    <button id="cpyBtn" class="btn secondary">Copiar link</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="tiny" style="margin-top:8px">Enter también busca. El orden de la frase no importa.</div>
 </div>
 
 <div id="results" class="box"></div>
@@ -52,82 +60,110 @@ Podés decir o escribir frases naturales como:<br>
 
 <script>
 // === pegá acá tu link de google sheets publicado ===
-const CSV_URL =  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
 // ===============================================
 
+// Stopwords / muletillas
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
-const RUBRO = {"resma":"Librería","papel":"Librería","hojas":"Librería","a4":"Librería","libros":"Librería","clavos":"Ferretería","tornillos":"Ferretería","flor":"Florería","flores":"Florería"};
+
+// Normalizadores
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
-function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t));}
-function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
+function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
 
-// —— interpretador flexible —— 
+// CSV parser
+function parseCSV(txt){
+  const rows = txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head = rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
+
+// —— interpretador de frases naturales —— 
 function understand(raw){
-  const t0=(raw||"").trim();
-  const t=norm(t0);
-  let zona="", qText=t0;
+  const t0 = (raw||"").trim();
+  const t  = norm(t0);
+  let zona = "", qText = t0;
 
-  // 1. “estoy en devoto y necesito clavos”
-  let m=t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*y\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)|[,.!?]|$)/i);
-  // 2. “en devoto necesito clavos”
-  if(!m) m=t.match(/(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)|[,.!?]|$)/i);
-  // 3. “almorzar en devoto”
-  if(!m) m=t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
+  // 1) “estoy en devoto y necesito clavos”  /  “estoy en devoto necesito clavos”
+  let m = t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  // 2) “en devoto necesito clavos” / “en el centro quiero almorzar”
+  if(!m) m = t.match(/(?:^|\s)(?:en|por|de)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  // 3) “almorzar en devoto” / “quiero comer en el centro”
+  if(!m) m = t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?en\s+([a-záéíóúñ\s]+)$/i);
 
   if(m){
-    zona=m[1].trim().split(/\s+/).slice(0,4).join(" ");
-    qText=t0.replace(new RegExp(m[0],'i'),'').trim();
+    zona  = m[1].trim().split(/\s+/).slice(0,4).join(" ");
+    qText = t0.replace(new RegExp(m[0],'i'), '').trim();
   }
 
-  qText=qText
+  // limpia muletillas al inicio
+  qText = qText
     .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
     .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
     .replace(/^(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b[\s,]*/i,"")
-    .replace(/^de\s+/i,"").trim();
+    .replace(/^de\s+/i,"")
+    .trim();
 
-  return {q:qText,z:zona};
+  return { q:qText, z:zona };
 }
 
-let DATA=[];
-fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);});
+// —— match de barrio robusto (tokens y includes en ambos sentidos) ——
+function barrioMatch(barrio, zona){
+  const tb = new Set(toks(barrio||""));
+  const tz = new Set(toks(zona||""));
+  if(tz.size===0) return true; // sin zona, no filtramos
+  for(const t of tz){ if(tb.has(t)) return true; } // comparte al menos 1 token
+  const nb = norm(barrio||""); const nz = norm(zona||"");
+  if(nb && nz && (nb.includes(nz) || nz.includes(nb))) return true;
+  return false;
+}
 
-document.getElementById('goBtn').addEventListener('click',buscar);
-document.getElementById('clearBtn').addEventListener('click',limpiar);
-document.getElementById('cpyBtn').addEventListener('click',()=>{
-  const inp=document.getElementById('qall').value.trim();
-  const u=new URL(location.href);
-  if(inp)u.searchParams.set('t',inp);else u.searchParams.delete('t');
+let DATA = [];
+fetch(CSV_URL).then(r=>r.text()).then(t=>{ DATA = parseCSV(t); });
+
+document.getElementById('goBtn').addEventListener('click', buscar);
+document.getElementById('clearBtn').addEventListener('click', limpiar);
+document.getElementById('cpyBtn').addEventListener('click', ()=>{
+  const inp = document.getElementById('qall').value.trim();
+  const u = new URL(location.href);
+  if(inp) u.searchParams.set('t', inp); else u.searchParams.delete('t');
   navigator.clipboard.writeText(u.toString()).then(()=>alert('Link copiado'));
 });
-document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
+document.getElementById('qall').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); buscar(); }
+});
 
 function buscar(){
-  const raw=document.getElementById('qall').value;
-  const {q,z}=understand(raw);
-  document.getElementById('chips').innerHTML=[
-    z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
-    q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:''
+  const raw = document.getElementById('qall').value;
+  const {q,z} = understand(raw);
+  document.getElementById('chips').innerHTML = [
+    z ? `<div class="chip"><strong>Zona:</strong> ${z}</div>` : '',
+    q ? `<div class="chip"><strong>Intención:</strong> ${q}</div>` : ''
   ].join('');
   render(buscarInterno(q,z));
 }
 
 function buscarInterno(q,z){
-  const qt=toks(q),zt=norm(z);
+  const qt = toks(q);
   return DATA.map(l=>{
-    const blob=norm(Object.values(l).join(" "));
-    let score=0;qt.forEach(t=>{if(blob.includes(t))score++;});
-    if(zt && !(l.barrio||"").toLowerCase().includes(zt))score=-1;
-    return{l,score};
-  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,8).map(x=>x.l);
+      const blob = norm(Object.values(l).join(" "));
+      let score = 0;
+      qt.forEach(t => { if(blob.includes(t)) score++; });
+      if(z && !barrioMatch(l.barrio||"", z)) score = -1;
+      return { l, score };
+    })
+    .filter(x=>x.score>0)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,8)
+    .map(x=>x.l);
 }
 
 function render(items){
-  const box=document.getElementById('results');
-  if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
-  box.innerHTML=items.map(r=>{
-    const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null;
-    const maps="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(`${r.direccion||''} ${r.barrio||''}`);
-    return`
+  const box = document.getElementById('results');
+  if(!items.length){ box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>'; return; }
+  box.innerHTML = items.map(r=>{
+    const wa   = r.whatsapp ? ("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")) : null;
+    const maps = "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(`${r.direccion||''} ${r.barrio||''}`);
+    return `
       <div class="card">
         <div class="title">${r.nombre_local||'(sin nombre)'} — <span>${r.rubro||''}</span></div>
         <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
@@ -137,7 +173,8 @@ function render(items){
           ${wa?`<a class="btn" target="_blank" href="${wa}">WhatsApp</a>`:''}
           <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
         </div>
-      </div>`;}).join("");
+      </div>`;
+  }).join("");
 }
 
 function limpiar(){
@@ -148,22 +185,18 @@ function limpiar(){
 
 // micrófono simple
 (function(){
-  const btn=document.getElementById('micBtn');
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){btn.disabled=true;btn.innerText='🎤—';btn.title='Dictado no disponible.';return;}
-  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.maxAlternatives=1;
-  btn.addEventListener('click',()=>{try{rec.start();btn.innerText='⏺️';}catch(e){}});
-  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar();};
-  rec.onend=()=>{btn.innerText='🎤';};
-  rec.onerror=()=>{btn.innerText='🎤';};
+  const btn = document.getElementById('micBtn');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ btn.disabled=true; btn.innerText='🎤—'; btn.title='Dictado no disponible.'; return; }
+  const rec = new SR(); rec.lang='es-AR'; rec.interimResults=false; rec.maxAlternatives=1;
+  btn.addEventListener('click', ()=>{ try{ rec.start(); btn.innerText='⏺️'; }catch(e){} });
+  rec.onresult = e => { const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); };
+  rec.onend    = ()=>{ btn.innerText='🎤'; };
+  rec.onerror  = ()=>{ btn.innerText='🎤'; };
 })();
 </script>
 </body>
 </html>
-
-
-
-
 
 
 
