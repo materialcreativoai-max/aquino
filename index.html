@@ -53,7 +53,11 @@ const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u
 const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","cerca","porfavor","porfa","avenida","sobre","calle"]);
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"").replace(/\s+/g," ").trim();
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));}
-function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
+function parseCSV(txt){
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
 function parseCoord(v){if(!v)return NaN;let s=String(v).replace(',','.');let n=parseFloat(s);if(Math.abs(n)>180)n/=1e6;return n;}
 function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
 
@@ -73,10 +77,13 @@ function understand(raw){
 
 function locationMatch(row,zona){
   if(!zona)return true;
-  const f=norm((row.direccion||"")+" "+(row.barrio||""));
+  const f=norm(((row.direccion||"")+" "+(row.barrio||"")).replace(/,+/g," ").replace(/\s+/g," ").trim());
   const z=norm(zona);
   if(f.includes(z))return true;
-  if(z.includes(" y ")){const [a,b]=z.split(" y ").map(x=>x.trim()).filter(Boolean);if(a&&b){if((f.includes(a)&&f.includes(b))||(f.includes(b)&&f.includes(a)))return true;}}
+  if(z.includes(" y ")){
+    const [a,b]=z.split(" y ").map(x=>x.trim()).filter(Boolean);
+    if(a&&b){if((f.includes(a)&&f.includes(b))||(f.includes(b)&&f.includes(a)))return true;}
+  }
   return z.split(/\s+/).filter(Boolean).some(p=>f.includes(p));
 }
 
