@@ -64,18 +64,14 @@ const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/
 function canon(t){ if(t.endsWith('es')&&t.length>4) return t.slice(0,-2); if(t.endsWith('s')&&t.length>4) return t.slice(0,-1); return t; }
 function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)).map(canon); }
 
-// —— mapeo intención→rubro(s) (solo agrego comidita/s y gastronomía/gastronómico) —— 
+// —— intención→rubro(s) (incluye comidita/s y gastronomía/gastronómico/s) —— 
 const INTENT2RUBROS = {
-  // comida
   "almorzar":["gastronom"], "almuerzo":["gastronom"], "comer":["gastronom"], "comida":["gastronom"],
   "menu":["gastronom"], "menú":["gastronom"],
   "gastronomia":["gastronom"], "gastronomico":["gastronom"], "gastronomicos":["gastronom"],
   "comidita":["gastronom"], "comiditas":["gastronom"],
-  // ferretería
   "tornillo":["ferreter"], "clavo":["ferreter"], "ferreteria":["ferreter"],
-  // librería
   "libro":["librer"], "resma":["librer"], "papel":["librer"], "a4":["librer"],
-  // florería
   "flor":["florer"], "floreria":["florer"]
 };
 const ACTION_TOKENS = new Set([
@@ -155,7 +151,7 @@ function locationMatch(row, zona){
   return nb.includes(nz) || nd.includes(nz) || nz.includes(nb) || nz.includes(nd);
 }
 
-// === CARGA CSV con proxy anti-CORS (estable) ===
+// === CARGA CSV con proxy anti-CORS ===
 let DATA = [];
 const PROXY = u => 'https://r.jina.ai/' + u.replace(/^https?:\/\//,'https://');
 
@@ -211,7 +207,7 @@ document.getElementById('locBtn').addEventListener('click', ()=>{
   );
 });
 
-// === BUSCAR (misma lógica; solo sumé palabras) ===
+// === BUSCAR ===
 function desiredRubros(tokens){
   const wants=new Set();
   for(const t of tokens){ const rs=INTENT2RUBROS[t]; if(rs) rs.forEach(r=>wants.add(r)); }
@@ -312,12 +308,3 @@ function render(items){
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
