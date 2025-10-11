@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo (frases simples)</title>
+<title>Aquí Nomás — Demo estable (anti-CORS/caché)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -23,23 +23,23 @@ h1{font-size:20px;margin:0 0 14px}
 .card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0}
 .title{font-weight:700;margin-bottom:4px}
 .title span{font-weight:600;color:#555}
-.promo{margin:6px 0 10px;color:var(--pri)}
+.promo{margin:6px 0 10px;color:#0b5cff}
 .meta{font-size:12px;color:#566}
 .empty{padding:12px;color:#666}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo (frases simples)</h1>
+  <h1>🏷️ Aquí Nomás — demo estable</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar', 'tornillos', 'libros', 'flores', 'almorzar en el centro'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar', 'tornillos en Devoto', 'comercios más cercanos', 'santa fe y laprida'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
-      <button id="cpyBtn" class="btn secondary">Copiar link</button>
+      <button id="cpyBtn" class="btn secondary" title="Copiar link con la búsqueda">Copiar link</button>
     </div>
     <div class="chips" id="chips"></div>
     <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Usando tu ubicación para priorizar cercanos.</div>
@@ -49,52 +49,146 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+// ====== CONFIG: fuentes de datos ======
+const SHEET_ID = "1eQ_uHV4qk7hDHph1vBiUFDs89hTiwRDjHre7QAAsrSk"; // tu sheet ID
+const GID = "0"; // la pestaña con tus locales
 
-const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa"]);
+// (OPCIONAL) si tenés el link de "Publicar en la web" (termina en output=csv), pegalo acá:
+const PUBLISH_CSV = ""; 
+// ej: "https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?gid=0&single=true&output=csv"
+
+// (OPCIONAL) si tenés un mirror en GitHub Raw, pegalo acá:
+const MIRROR_CSV = ""; 
+// ej: "https://raw.githubusercontent.com/tuuser/turepo/main/locales.csv"
+
+// Export directo + proxy anti-CORS (no requiere “Publicar en la web”, sí compartir “Cualquiera con enlace – Lector”)
+const EXPORT_CSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+const PROXY = u => 'https://r.jina.ai/' + u.replace(/^https?:\/\//,'https://');
+
+// Orden de prueba (se prueba la primera que responda)
+const CSV_SOURCES = [
+  ... (PUBLISH_CSV ? [PUBLISH_CSV, PROXY(PUBLISH_CSV)] : []),
+  PROXY(EXPORT_CSV),
+  ...(MIRROR_CSV ? [MIRROR_CSV] : [])
+];
+
+// ====== utilidades de texto ======
+const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa","avenida","av","sobre","altura","calle","por","lo","los","las"]);
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function canon(t){ if(t.endsWith('es')&&t.length>4)return t.slice(0,-2); if(t.endsWith('s')&&t.length>4)return t.slice(0,-1); return t; }
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t)).map(canon);}
 
 const INTENT2RUBROS = {
-  "almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],"comida":["gastronom"],
+  "almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],"comida":["gastronom"],"cenar":["gastronom"],"cena":["gastronom"],
   "tornillo":["ferreter"],"clavo":["ferreter"],"ferreteria":["ferreter"],
   "libro":["librer"],"resma":["librer"],"papel":["librer"],"a4":["librer"],
   "flor":["florer"],"floreria":["florer"]
 };
-
 const ACTION_TOKENS=new Set(["almorzar","almuerzo","comer","comida","cenar","cena"]);
 
 const keyNorm=k=>(k||"").toLowerCase().replace(/[^a-z]/g,"");
 function getField(obj,target){const want=keyNorm(target);for(const k of Object.keys(obj)){if(keyNorm(k)===want)return obj[k];}}
 
 function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
+
+// ====== coords / distancia ======
 function parseCoordRaw(v){if(v==null)return NaN;let s=String(v).trim().replace(',','.');if(!s)return NaN;let n=Number(s);if(Number.isNaN(n)){const neg=s.trim().startsWith('-');const digits=s.replace(/[^0-9]/g,'');if(digits.length>=7){n=parseInt(digits,10)/1e6;if(neg)n=-Math.abs(n);}else if(/^\-?\d+$/.test(s)){n=parseInt(s,10);}}if(Math.abs(n)>180)n=n/1e6;return n;}
 function parseLat(v){const n=parseCoordRaw(v);return Math.abs(n)<=90?n:NaN;}
 function parseLng(v){const n=parseCoordRaw(v);return Math.abs(n)<=180?n:NaN;}
 function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
+
 let USER_POS=null;
 
+// ====== interpretar frase ======
 function understand(raw){
   const t0=(raw||"").trim(), t=norm(t0);
   let zona="", qText=t0;
-  let m=t.match(/(?:en|por|de|sobre)\s+([a-záéíóúñ\s]+)$/i);
-  if(m){zona=(m[1]||"").trim();qText=t0.replace(new RegExp(m[0],'i'),'').trim();}
-  qText=qText.replace(/^(?:hola|buenas|busc\w*|necesit\w*|quiero)\b[\s,]*/i,"").trim();
+  let m=t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  if(!m) m=t.match(/(?:^|\s)(?:en|por|de|sobre)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
+  if(!m) m=t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?(?:en|por|sobre)\s+([a-záéíóúñ\s]+)$/i);
+  if(!m) m=t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
+  if(m){ zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" "); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
+  qText=qText.replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"").replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"").replace(/^(?:busc\w*|necesit\w*|quiero)\b[\s,]*/i,"").replace(/^de\s+/i,"").trim();
   return {q:qText,z:zona};
 }
-
 function desiredRubros(tokens){const wants=new Set();for(const t of tokens){const rs=INTENT2RUBROS[t];if(rs)rs.forEach(r=>wants.add(r));}return wants;}
-function locationMatch(row,zona){if(!zona)return true;const zt=toks(zona),tb=toks(row.barrio||""),td=toks(row.direccion||"");for(const z of zt){if(tb.includes(z)||td.includes(z))return true;}return false;}
+function locationMatch(row,zona){if(!zona)return true;const zt=toks(zona),tb=toks(row.barrio||""),td=toks(row.direccion||"");for(const z of zt){if(tb.includes(z)||td.includes(z))return true;}const nb=norm(row.barrio||""),nd=norm(row.direccion||""),nz=norm(zona);return nb.includes(nz)||nd.includes(nz)||nz.includes(nb)||nz.includes(nd);}
+
+// ====== loader robusto ======
+async function fetchWithTimeout(url, ms=8000){
+  const u = new URL(url);
+  u.searchParams.set('_t', Date.now().toString()); // rompe-caché
+  const ctrl = new AbortController();
+  const id = setTimeout(()=>ctrl.abort(), ms);
+  try{
+    const r = await fetch(u.toString(), { cache:'no-store', signal:ctrl.signal });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.text();
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function fetchFirstAvailable(urls){
+  const errors=[];
+  for(const base of urls){
+    for(let attempt=1; attempt<=2; attempt++){
+      try{
+        console.log(`Intentando CSV [${attempt}/2]:`, base);
+        const txt = await fetchWithTimeout(base, 8000 + attempt*2000);
+        if (!txt || !txt.trim()) throw new Error('CSV vacío');
+        // sanity check mínimo: que tenga encabezados
+        if (!/nombre|rubro|keywords|barrio|direccion/i.test(txt.split('\n')[0]||'')) {
+          console.warn('Encabezado no esperado, igual continúo:', txt.split('\n')[0]);
+        }
+        return txt;
+      }catch(e){
+        console.warn('Fallo en', base, e);
+        errors.push(`${base} → ${e}`);
+        await new Promise(r=>setTimeout(r, 400*attempt)); // pequeño backoff
+      }
+    }
+  }
+  throw new Error('Todas las fuentes fallaron:\n' + errors.join('\n'));
+}
 
 let DATA=[];
-fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);console.log('CSV cargado:',DATA.length)}).catch(e=>{alert('Error al cargar datos');console.error(e);});
+(async function load(){
+  try{
+    const sources = CSV_SOURCES.length ? CSV_SOURCES : [PROXY(EXPORT_CSV)];
+    const txt = await fetchFirstAvailable(sources);
+    DATA = parseCSV(txt);
+    console.log('CSV cargado. Filas:', DATA.length);
+  }catch(e){
+    console.error('Error cargando CSV:', e);
+    alert('No pude cargar la base (CSV). Revisá: compartir “Cualquiera con enlace – Lector” o pegá el link de “Publicar en la web”.');
+  }
+})();
 
-document.getElementById('goBtn').addEventListener('click',buscar);
-document.getElementById('clearBtn').addEventListener('click',()=>{document.getElementById('qall').value="";document.getElementById('results').innerHTML="";});
-document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
-document.getElementById('locBtn').addEventListener('click',()=>{if(!navigator.geolocation){alert('Tu navegador no soporta GPS');return;}navigator.geolocation.getCurrentPosition(pos=>{USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude};document.getElementById('gpsHint').style.display='block';buscar();},err=>{alert('No pude obtener ubicación');});});
+// ====== UI ======
+document.getElementById('goBtn').addEventListener('click', buscar);
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  document.getElementById('qall').value="";
+  document.getElementById('results').innerHTML="";
+  document.getElementById('chips').innerHTML="";
+});
+document.getElementById('cpyBtn').addEventListener('click', ()=>{
+  const inp=document.getElementById('qall').value.trim();
+  const u=new URL(location.href);
+  if(inp) u.searchParams.set('t', inp); else u.searchParams.delete('t');
+  navigator.clipboard.writeText(u.toString()).then(()=>alert('Link copiado'));
+});
+document.getElementById('qall').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); buscar(); }});
+document.getElementById('locBtn').addEventListener('click', ()=>{
+  if(!navigator.geolocation){ alert('Tu navegador no soporta geolocalización.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude}; document.getElementById('gpsHint').style.display='block'; buscar(); },
+    err=>{ alert('No pude obtener tu ubicación. Permití el acceso al GPS.'); },
+    { enableHighAccuracy:true, timeout:8000, maximumAge:0 }
+  );
+});
 
+// ====== BUSCAR ======
 function buscar(){
   const raw=document.getElementById('qall').value;
   const {q,z}=understand(raw);
@@ -105,26 +199,35 @@ function buscar(){
   render(buscarInterno(q,z));
 }
 
+function desiredRubros(tokens){const wants=new Set();for(const t of tokens){const rs=INTENT2RUBROS[t];if(rs)rs.forEach(r=>wants.add(r));}return wants;}
+
 function buscarInterno(q,z){
   const qt=toks(q);
   const wants=desiredRubros(qt);
   const noIntent=qt.length===0;
+
   return DATA.map(l=>{
-    const rubro=norm(l.rubro||"");
-    const blob=norm((l.rubro||"")+" "+(l.keywords||""));
+    const rubro=canon(l.rubro||"");
+    const blob=canon((l.rubro||"")+" "+(l.keywords||"")); // solo rubro+keywords para intención
     let score=0;
+
     if(wants.size){
       let ok=false;for(const w of wants){if(rubro.includes(w)){ok=true;break;}}
-      if(!ok)score=-1;
+      if(!ok) score=-1;
     }
+
     if(score>=0){qt.forEach(t=>{if(blob.includes(t))score+=1;});}
-    if(score>=0&&z&&!locationMatch(l,z))score=-1;
+
+    if(score>=0 && z && !locationMatch(l,z)) score=-1;
+
     const lat=parseLat(getField(l,'lat')),lng=parseLng(getField(l,'lng'));
     let dist=null;
     if(score>=0&&USER_POS&&!isNaN(lat)&&!isNaN(lng)){dist=haversineKm(USER_POS,{lat,lng});const bonus=Math.max(0,2-(dist/1.5));score+=bonus;}
-    if(noIntent&&USER_POS&&dist!==null)score=1/(dist+1);
+
+    if(noIntent && USER_POS && dist!==null) score=1/(dist+1);
+
     return {l:{...l,_distKm:dist,_plat:lat,_plng:lng},score};
-  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,10).map(x=>x.l);
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(x=>x.l);
 }
 
 function render(items){
@@ -132,7 +235,8 @@ function render(items){
   if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
   box.innerHTML=items.map(r=>{
     const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
-    const dest=!isNaN(r._plat)&&!isNaN(r._plng)?`${r._plat},${r._plng}`:`${r.direccion||''} ${r.barrio||''}`;
+    const hasCoords=!isNaN(r._plat)&&!isNaN(r._plng);
+    const dest=hasCoords?`${r._plat},${r._plng}`:`${r.direccion||''} ${r.barrio||''}`;
     const maps=USER_POS?`https://www.google.com/maps/dir/?api=1&origin=${USER_POS.lat},${USER_POS.lng}&destination=${encodeURIComponent(dest)}&travelmode=walking`:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dest)}`;
     const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null;
     const dist=(typeof r._distKm==='number')?`<div class="meta">≈ ${r._distKm.toFixed(2)} km</div>`:'';
@@ -150,11 +254,11 @@ function render(items){
   }).join('');
 }
 
-// Mic
+// ====== Mic ======
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){btn.disabled=true;btn.innerText='🎤—';return;}
+  if(!SR){btn.disabled=true;btn.innerText='🎤—';btn.title='Dictado no disponible.';return;}
   const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.maxAlternatives=1;
   btn.addEventListener('click',()=>{try{rec.start();btn.innerText='⏺️';}catch(e){}});
   rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar();};
@@ -163,6 +267,3 @@ function render(items){
 </script>
 </body>
 </html>
-
-
-
