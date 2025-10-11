@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — demo v3 (ajuste distancia y coincidencias)</title>
+<title>Aquí Nomás — demo v4 (distancia en cuadras y correcciones finales)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,18 +30,18 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo v3 (ajuste distancia y coincidencias)</h1>
+  <h1>🏷️ Aquí Nomás — demo v4 (distancia en cuadras)</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'santa fe', 'santa fe y cerrito', 'cerca'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'Santa Fe', 'Santa Fe y Cerrito', 'cerca'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales dentro de 1 km.</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales dentro de 1 km (10 cuadras).</div>
   </div>
 
   <div id="results" class="box"></div>
@@ -55,25 +55,32 @@ function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).fi
 function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
 function parseCoord(v){if(!v)return NaN;let s=String(v).replace(',','.');let n=parseFloat(s);if(Math.abs(n)>180)n/=1e6;return n;}
 function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
+
 let USER_POS=null,NEAR_ACTIVE=false;
 const NEAR_RADIUS_KM=1.0;
-let DATA=[];fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);console.log("CSV cargado",DATA.length);});
+let DATA=[];
+fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);console.log("CSV cargado",DATA.length);});
 
-function understand(raw){const t0=(raw||"").trim(),t=norm(t0);let zona="",qText=t0;let m=t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)/i);if(m){zona=(m[1]||"").trim();qText=t0.replace(new RegExp(m[0],'i'),'').trim();}return{q:qText,z:zona};}
+function understand(raw){
+  const t0=(raw||"").trim(),t=norm(t0);
+  let zona="",qText=t0;
+  const m=t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)/i);
+  if(m){zona=(m[1]||"").trim();qText=t0.replace(new RegExp(m[0],'i'),'').trim();}
+  return{q:qText,z:zona};
+}
 
-// Coincidencias de zona (mejoradas)
+// ——— MEJOR coincidencia flexible de ubicaciones ———
 function locationMatch(row,zona){
   if(!zona)return true;
   const f=norm(row.direccion||"")+" "+norm(row.barrio||"");
   const z=norm(zona);
-  // Si es intersección con "y" en cualquier orden
-  const inter=z.split(" y ").map(x=>x.trim());
-  if(inter.length===2){
-    const [a,b]=inter;
-    return (f.includes(a)&&f.includes(b));
+  // 1. Si contiene "y" → intersección en cualquier orden
+  if(z.includes(" y ")){
+    const [a,b]=z.split(" y ").map(x=>x.trim());
+    return (f.includes(a)&&f.includes(b))||(f.includes(b)&&f.includes(a));
   }
-  // Si es una sola calle, buscar parcial pero con coincidencia completa de palabra
-  return new RegExp(`\\b${z}\\b`).test(f);
+  // 2. Si es una sola palabra: coincidencia parcial, no exacta
+  return f.includes(z);
 }
 
 document.getElementById('goBtn').addEventListener('click',buscar);
@@ -87,7 +94,7 @@ function buscar(){
   document.getElementById('chips').innerHTML=[
     z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
     q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:'',
-    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos (≤ ${NEAR_RADIUS_KM} km)</div>`:''
+    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:''
   ].join('');
   render(buscarInterno(q,z));
 }
@@ -105,10 +112,11 @@ function buscarInterno(q,z){
     if(score>=0&&USER_POS&&!isNaN(lat)&&!isNaN(lng)){
       distKm=haversineKm(USER_POS,{lat,lng});
       if(NEAR_ACTIVE){
-        // ampliar tolerancia a 1 km real
-        if(distKm>NEAR_RADIUS_KM+0.2)score=-1;else score+=2;
+        if(distKm>NEAR_RADIUS_KM+0.3)score=-1;
+        else score+=2;
       }else{
-        const bonus=Math.max(0,2-(distKm/1.5));score+=bonus;
+        const bonus=Math.max(0,2-(distKm/1.5));
+        score+=bonus;
       }
     }
     return{l:{...l,_distKm:distKm},score};
@@ -125,8 +133,18 @@ function render(items){
     const name=r.nombre_local||'(sin nombre)';
     const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
     const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null;
-    const dist=(typeof r._distKm==='number')?`<div class="meta">≈ ${r._distKm.toFixed(2)} km</div>`:'';
-    return `<div class="card"><div class="title">${name} — <span>${r.rubro||''}</span></div><div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>${r.horario?`<div class="promo">Horario: ${r.horario}</div>`:''}${r.promo_texto?`<div class="promo">${r.promo_texto}</div>`:''}${dist}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${wa?`<a class="btn" target="_blank" href="${wa}">WhatsApp</a>`:''}<a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a></div></div>`;
+    const dist=(typeof r._distKm==='number')?`<div class="meta">≈ ${(r._distKm*10).toFixed(0)} cuadras</div>`:'';
+    return `<div class="card">
+      <div class="title">${name} — <span>${r.rubro||''}</span></div>
+      <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
+      ${r.horario?`<div class="promo">Horario: ${r.horario}</div>`:''}
+      ${r.promo_texto?`<div class="promo">${r.promo_texto}</div>`:''}
+      ${dist}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        ${wa?`<a class="btn" target="_blank" href="${wa}">WhatsApp</a>`:''}
+        <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
+      </div>
+    </div>`;
   }).join("");
 }
 
