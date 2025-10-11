@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — demo v4 (distancia en cuadras y correcciones finales)</title>
+<title>Aquí Nomás — demo v5 (corrección final)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo v4 (distancia en cuadras)</h1>
+  <h1>🏷️ Aquí Nomás — demo v5 (corrección final)</h1>
 
   <div class="box">
     <div class="row">
@@ -41,14 +41,17 @@ h1{font-size:20px;margin:0 0 14px}
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales dentro de 1 km (10 cuadras).</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales dentro de 1 km (10-12 cuadras).</div>
   </div>
 
   <div id="results" class="box"></div>
 </div>
 
 <script>
+// === URL de Google Sheets publicado (termina en output=csv) ===
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+// =============================================================
+
 const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","cerca","porfavor","porfa","avenida","sobre","calle"]);
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));}
@@ -57,10 +60,11 @@ function parseCoord(v){if(!v)return NaN;let s=String(v).replace(',','.');let n=p
 function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
 
 let USER_POS=null,NEAR_ACTIVE=false;
-const NEAR_RADIUS_KM=1.0;
+const NEAR_RADIUS_KM=1.2;
 let DATA=[];
 fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);console.log("CSV cargado",DATA.length);});
 
+// === Analizador simple de frase ===
 function understand(raw){
   const t0=(raw||"").trim(),t=norm(t0);
   let zona="",qText=t0;
@@ -69,20 +73,22 @@ function understand(raw){
   return{q:qText,z:zona};
 }
 
-// ——— MEJOR coincidencia flexible de ubicaciones ———
+// === Coincidencia flexible de ubicaciones ===
 function locationMatch(row,zona){
   if(!zona)return true;
-  const f=norm(row.direccion||"")+" "+norm(row.barrio||"");
+  const f=norm((row.direccion||"")+" "+(row.barrio||""));
   const z=norm(zona);
-  // 1. Si contiene "y" → intersección en cualquier orden
+  // Intersecciones en cualquier orden
   if(z.includes(" y ")){
     const [a,b]=z.split(" y ").map(x=>x.trim());
     return (f.includes(a)&&f.includes(b))||(f.includes(b)&&f.includes(a));
   }
-  // 2. Si es una sola palabra: coincidencia parcial, no exacta
-  return f.includes(z);
+  // Coincidencia parcial tolerante (ej. “santa fe” encuentra “laprida y santa fe”)
+  const palabras=z.split(/\s+/).filter(Boolean);
+  return palabras.some(p=>f.includes(p));
 }
 
+// === Interfaz ===
 document.getElementById('goBtn').addEventListener('click',buscar);
 document.getElementById('clearBtn').addEventListener('click',()=>{document.getElementById('qall').value="";document.getElementById('results').innerHTML="";document.getElementById('chips').innerHTML="";NEAR_ACTIVE=false;document.getElementById('gpsHint').style.display='none';});
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
@@ -148,6 +154,7 @@ function render(items){
   }).join("");
 }
 
+// === Micrófono ===
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
