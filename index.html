@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — versión estable</title>
+<title>Aquí Nomás — versión estable OK</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — versión estable</h1>
+  <h1>🏷️ Aquí Nomás — versión estable OK</h1>
 
   <div class="box">
     <div class="row">
@@ -48,21 +48,21 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+/* ===== CONFIG ===== */
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
 
-const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle"]);
-const norm = s => String(s||"").toLowerCase()
+/* ===== UTILS ===== */
+const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle"]);
+const norm=s=>String(s||"").toLowerCase()
   .normalize("NFD").replace(/\p{Diacritic}/gu,"")
   .replace(/[.,;:]+/g," ")
   .replace(/\s+/g," ").trim();
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));}
-
 function parseCSV(txt){
   const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
-
 function parseCoord(v){
   if(v==null||v==="")return NaN;
   let s=String(v).replace(',','.');
@@ -75,7 +75,6 @@ function parseCoord(v){
   if(Math.abs(n)>180)n/=1e6;
   return n;
 }
-
 function haversineKm(a,b){
   const R=6371,toRad=x=>x*Math.PI/180;
   const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
@@ -83,37 +82,42 @@ function haversineKm(a,b){
   const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
-
-// ——— alias de calles (tolerancia a variantes/typos) ———
+/* alias para variantes de calles */
 function aliasPlace(s){
   let t=norm(s);
-  t=t.replace(/\bnueva?\b\s+de\s+julio/g,"9 de julio"); // “nueva/nueva de julio” → 9 de julio
+  t=t.replace(/\bnueva?\b\s+de\s+julio/g,"9 de julio");
   t=t.replace(/\bnueve\s+de\s+julio/g,"9 de julio");
+  t=t.replace(/\b9 julio\b/g,"9 de julio");
   t=t.replace(/\bcorrs?entes\b/g,"corrientes");
-  t=t.replace(/\bsanta\s*fe\b/g,"santa fe");
   t=t.replace(/\bcerritto\b/g,"cerrito");
   return t;
 }
 
+/* ===== STATE ===== */
 let USER_POS=null, NEAR_ACTIVE=false;
-const NEAR_RADIUS_KM=1.0; // 1km
-let DATA=[], DATA_NORM=[];
+const NEAR_RADIUS_KM=1.0; // filtro estricto 1 km
+let DATA=[], IDX=[]; // IDX = normalizados para match rápido
+let LOADED=false;
 
+/* ===== LOAD ===== */
 fetch(CSV_URL,{cache:"no-store"})
   .then(r=>r.text())
   .then(t=>{
     DATA=parseCSV(t);
-    DATA_NORM=DATA.map(row=>{
+    IDX=DATA.map(row=>{
       const nombre=norm(row.nombre_local||row.nombre||row.local||"");
       const rubro=norm(row.rubro||"");
       const kw=norm(row.keywords||"");
-      const dir=aliasPlace((row.direccion||""));
-      const bar=norm(row.barrio||"");
-      const dirbar=aliasPlace(dir+" "+bar).replace(/,+/g," ").replace(/\s+/g," ").trim();
-      return {nombre,rubro,kw,dirbar};
+      const dirRaw=(row.direccion||"")+" "+(row.barrio||"");
+      const dirbar=aliasPlace(dirRaw).replace(/,+/g," ").replace(/\s+/g," ").trim();
+      const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
+      return {nombre,rubro,kw,dirbar,lat,lng};
     });
-  });
+    LOADED=true;
+  })
+  .catch(()=>{ alert("No pude cargar la base (CSV)."); });
 
+/* ===== NLP ===== */
 function understand(raw){
   const t0=(raw||"").trim();
   const t=aliasPlace(t0);
@@ -125,7 +129,7 @@ function understand(raw){
   let m=t.match(/(?:estoy|vivo|me\s+encuentro)?\s*(?:en|por|sobre)\s+([a-z0-9\s]+)$/i);
   if(m){ zona=(m[1]||"").trim(); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
   else{
-    // fallback: si es corto (1–4 tokens) o incluye “ y ” → tratamos como zona… salvo que sea nombre exacto de local
+    // si es corto o contiene “ y ”, tratamos como zona provisional
     const words=t.split(/\s+/).filter(Boolean);
     if(words.length>0&&(words.length<=4||t.includes(" y "))){
       zona=t0.trim(); qText="";
@@ -133,34 +137,32 @@ function understand(raw){
   }
   return { q:qText, z:zona, wantsNear };
 }
-
-// ¿zona parece ser nombre de local? Mueve a intención.
+/* si la “zona” es el nombre de un local, moverlo a intención */
 function moveZoneIfLooksLikeName(q,z){
   if(!z) return {q,z};
   const zn=norm(z);
-  const hit = DATA_NORM.some(r => r.nombre && (r.nombre===zn || r.nombre.includes(zn)));
-  if(hit){ return { q: q? (q+" "+z) : z, z:"" }; }
+  const looks = IDX.some(r => r.nombre && (r.nombre===zn || r.nombre.includes(zn)));
+  if(looks){ return { q: q? (q+" "+z) : z, z:"" }; }
   return {q,z};
 }
 
-// match de ubicación (calle simple o intersección “a y b”)
-function locationMatch(rowIdx,zona){
+/* match ubicación: intersección estricta o calle/barrio parcial */
+function locationMatch(idx,zona){
   if(!zona) return true;
-  const f = DATA_NORM[rowIdx].dirbar;      // direccion+barrio normalizado/alias
-  const z = aliasPlace(zona);
+  const f=IDX[idx].dirbar;
+  const z=aliasPlace(zona);
 
   if(f.includes(norm(z))) return true;
 
-  if(z.includes(" y ")){ // intersección estricta
-    const [ra,rb] = z.split(" y ").map(x=>norm(x.trim())).filter(Boolean);
-    if(ra && rb){
-      return (f.includes(ra) && f.includes(rb));
-    }
+  if(z.includes(" y ")){ // intersección: ambas palabras deben estar
+    const [a,b]=z.split(" y ").map(x=>norm(x.trim())).filter(Boolean);
+    if(a&&b){ return (f.includes(a)&&f.includes(b)); }
   }
   // calle sola o término de barrio
   return z.split(/\s+/).filter(Boolean).some(p=>f.includes(norm(p)));
 }
 
+/* ===== UI ===== */
 document.getElementById('goBtn').addEventListener('click',buscar);
 document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('qall').value="";
@@ -178,13 +180,16 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   },()=>alert('No pude obtener tu ubicación. Permití acceso al GPS.'),{enableHighAccuracy:true,timeout:8000,maximumAge:0});
 });
 
+/* ===== SEARCH ===== */
 function buscar(){
+  if(!LOADED){ alert("Cargando datos… probá de nuevo en 1 segundo."); return; }
+
   let raw=document.getElementById('qall').value;
   let parsed=understand(raw);
   if(parsed.wantsNear && USER_POS){ NEAR_ACTIVE=true; document.getElementById('gpsHint').style.display='block'; }
   if(NEAR_ACTIVE) parsed.z="";
 
-  const moved = moveZoneIfLooksLikeName(parsed.q, parsed.z);
+  const moved=moveZoneIfLooksLikeName(parsed.q, parsed.z);
   const q=moved.q, z=moved.z;
 
   document.getElementById('chips').innerHTML=[
@@ -200,35 +205,40 @@ function buscarInterno(q,z){
   const qnorm=norm(q);
   const qt=toks(q);
 
-  return DATA.map((l,idx)=>{
-    const meta=DATA_NORM[idx];
+  return DATA.map((row,idx)=>{
+    const meta=IDX[idx];
     let score=0;
 
-    // nombre exacto o parcial (ej “comiditas”)
-    if(qnorm && meta.nombre===qnorm) score+=6;
-    if(qnorm && meta.nombre.includes(qnorm)) score+=3;
+    // nombre exacto/parcial (para “comiditas”)
+    if(qnorm && meta.nombre===qnorm) score+=8;
+    if(qnorm && meta.nombre.includes(qnorm)) score+=4;
 
     // tokens contra nombre/keywords/rubro
     qt.forEach(t=>{
-      if(meta.nombre.includes(t)) score+=2.5;
-      if(meta.kw.includes(t))     score+=1.5;
-      if(meta.rubro.includes(t))  score+=1.0;
+      if(meta.nombre.includes(t)) score+=3;
+      if(meta.kw.includes(t))     score+=2;
+      if(meta.rubro.includes(t))  score+=1;
     });
 
+    // filtro de ubicación
     if(z && !locationMatch(idx,z)) score=-1;
 
-    const lat=parseCoord(l.lat), lng=parseCoord(l.lng);
+    // GPS: en modo “cerca” excluir sin coordenadas y filtrar por 1 km
     let distKm=null;
-    if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
-      distKm=haversineKm(USER_POS,{lat,lng});
-      if(NEAR_ACTIVE){
-        if(distKm<=NEAR_RADIUS_KM) score+=4; else score=-1; // filtra estrictamente a 1 km
-      }else{
-        score+=Math.max(0, 2 - (distKm/1.5));
+    if(score>=0 && USER_POS){
+      if(Number.isFinite(meta.lat) && Number.isFinite(meta.lng) && !isNaN(meta.lat) && !isNaN(meta.lng)){
+        distKm=haversineKm(USER_POS,{lat:meta.lat,lng:meta.lng});
+        if(NEAR_ACTIVE){
+          if(distKm<=NEAR_RADIUS_KM) score+=5; else score=-1;
+        }else{
+          score+=Math.max(0, 2 - (distKm/1.5));
+        }
+      }else if(NEAR_ACTIVE){
+        score=-1; // sin coords, fuera en modo "cerca"
       }
     }
 
-    return { l:{...l,_distKm:distKm}, score };
+    return { l:{...row,_distKm:distKm}, score };
   })
   .filter(x=>x.score>0)
   .sort((a,b)=>b.score-a.score)
@@ -236,11 +246,12 @@ function buscarInterno(q,z){
   .map(x=>x.l);
 }
 
+/* ===== RENDER ===== */
 function render(items){
   const box=document.getElementById('results');
   if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
   box.innerHTML=items.map(r=>{
-    const name=r.nombre_local||'(sin nombre)';
+    const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
     const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
     const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null;
     const dist=(typeof r._distKm==='number')?`<div class="meta">≈ ${(r._distKm*10).toFixed(0)} cuadras</div>`:'';
@@ -258,7 +269,7 @@ function render(items){
   }).join("");
 }
 
-// Micrófono
+/* ===== MIC ===== */
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
