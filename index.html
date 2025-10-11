@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — demo final corregido</title>
+<title>Aquí Nomás — demo v3 (ajuste distancia y coincidencias)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,18 +30,18 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo final corregido</h1>
+  <h1>🏷️ Aquí Nomás — demo v3 (ajuste distancia y coincidencias)</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'comiditas', 'almorzar en el centro', 'santa fe y cerrito'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'santa fe', 'santa fe y cerrito', 'cerca'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Modo cercanos activo (≤ 1 km)</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales dentro de 1 km.</div>
   </div>
 
   <div id="results" class="box"></div>
@@ -55,14 +55,26 @@ function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).fi
 function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
 function parseCoord(v){if(!v)return NaN;let s=String(v).replace(',','.');let n=parseFloat(s);if(Math.abs(n)>180)n/=1e6;return n;}
 function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
-
 let USER_POS=null,NEAR_ACTIVE=false;
-const NEAR_RADIUS_KM=1;
+const NEAR_RADIUS_KM=1.0;
 let DATA=[];fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);console.log("CSV cargado",DATA.length);});
 
-function understand(raw){const t0=(raw||"").trim(),t=norm(t0);let zona="",qText=t0;let m=t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)$/i);if(m){zona=(m[1]||"").trim();qText=t0.replace(new RegExp(m[0],'i'),'').trim();}return{q:qText,z:zona};}
+function understand(raw){const t0=(raw||"").trim(),t=norm(t0);let zona="",qText=t0;let m=t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)/i);if(m){zona=(m[1]||"").trim();qText=t0.replace(new RegExp(m[0],'i'),'').trim();}return{q:qText,z:zona};}
 
-function locationMatch(row,zona){if(!zona)return true;const f=norm(row.direccion||"")+" "+norm(row.barrio||"");const z=norm(zona);if(z.includes(" y ")){const [a,b]=z.split(" y ").map(x=>x.trim());return f.includes(a)&&f.includes(b);}return f.includes(z);}
+// Coincidencias de zona (mejoradas)
+function locationMatch(row,zona){
+  if(!zona)return true;
+  const f=norm(row.direccion||"")+" "+norm(row.barrio||"");
+  const z=norm(zona);
+  // Si es intersección con "y" en cualquier orden
+  const inter=z.split(" y ").map(x=>x.trim());
+  if(inter.length===2){
+    const [a,b]=inter;
+    return (f.includes(a)&&f.includes(b));
+  }
+  // Si es una sola calle, buscar parcial pero con coincidencia completa de palabra
+  return new RegExp(`\\b${z}\\b`).test(f);
+}
 
 document.getElementById('goBtn').addEventListener('click',buscar);
 document.getElementById('clearBtn').addEventListener('click',()=>{document.getElementById('qall').value="";document.getElementById('results').innerHTML="";document.getElementById('chips').innerHTML="";NEAR_ACTIVE=false;document.getElementById('gpsHint').style.display='none';});
@@ -75,7 +87,7 @@ function buscar(){
   document.getElementById('chips').innerHTML=[
     z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
     q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:'',
-    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:''
+    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos (≤ ${NEAR_RADIUS_KM} km)</div>`:''
   ].join('');
   render(buscarInterno(q,z));
 }
@@ -93,7 +105,8 @@ function buscarInterno(q,z){
     if(score>=0&&USER_POS&&!isNaN(lat)&&!isNaN(lng)){
       distKm=haversineKm(USER_POS,{lat,lng});
       if(NEAR_ACTIVE){
-        if(distKm>NEAR_RADIUS_KM)score=-1;else score+=2;
+        // ampliar tolerancia a 1 km real
+        if(distKm>NEAR_RADIUS_KM+0.2)score=-1;else score+=2;
       }else{
         const bonus=Math.max(0,2-(distKm/1.5));score+=bonus;
       }
@@ -109,7 +122,7 @@ function render(items){
   const box=document.getElementById('results');
   if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
   box.innerHTML=items.map(r=>{
-    const name=r.nombre_local||r.nombre||'(sin nombre)';
+    const name=r.nombre_local||'(sin nombre)';
     const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
     const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null;
     const dist=(typeof r._distKm==='number')?`<div class="meta">≈ ${r._distKm.toFixed(2)} km</div>`:'';
@@ -129,5 +142,3 @@ function render(items){
 </script>
 </body>
 </html>
-
-
