@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — estable (fix: “cerca” + nombres + calles/intersecciones)</title>
+<title>Aquí Nomás — estable (near 1.5 km)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -41,18 +41,19 @@ h1{font-size:20px;margin:0 0 14px}
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales ≤ 1 km (≈10–12 cuadras).</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales ≤ 1.5 km (≈15 cuadras).</div>
   </div>
 
   <div id="results" class="box"></div>
 </div>
 
 <script>
-/* ===== CSV ===== */
+/* === TU CSV PUBLICADO (output=csv) === */
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+/* ==================================== */
 
-/* ===== utils ===== */
-const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle"]);
+/* utils */
+const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle","cerca"]);
 const norm=s=>String(s||"").toLowerCase()
   .normalize("NFD").replace(/\p{Diacritic}/gu,"")
   .replace(/[.,;:]+/g," ")
@@ -63,16 +64,25 @@ function parseCSV(txt){
   const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
+/* coordenadas robustas: acepta -34.603.715 / -58,382,320 / -34592650 */
 function parseCoord(v){
-  if(v==null||v==="")return NaN;
-  let s=String(v).replace(',','.');
-  let n=Number(s);
-  if(Number.isNaN(n)){
-    const neg=/^-/.test(s);
-    const digits=s.replace(/[^0-9]/g,'');
-    if(digits.length>=7){ n=parseInt(digits,10)/1e6; if(neg) n=-Math.abs(n); }
+  if(v==null||v==="") return NaN;
+  let s=String(v).trim();
+  s=s.replace(/,/g,'.');
+  const neg = s.trim().startsWith('-');
+  const parts = s.split('.');
+  if(parts.length>2){
+    s = parts[0]+'.'+parts.slice(1).join(''); // deja solo el primer punto como decimal
   }
-  if(Math.abs(n)>180)n/=1e6;
+  let n = Number(s);
+  if(Number.isNaN(n)){
+    const digits = s.replace(/[^0-9]/g,'');
+    if(digits.length>=7){
+      n = parseInt(digits,10)/1e6;
+      if(neg) n = -Math.abs(n);
+    }
+  }
+  if(Math.abs(n)>180) n/=1e6;
   return n;
 }
 function haversineKm(a,b){
@@ -82,7 +92,7 @@ function haversineKm(a,b){
   const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
-/* alias y normalizador de calles */
+/* alias calles */
 function aliasPlace(s){
   let t=norm(s);
   t=t.replace(/\bnueva?\b\s+de\s+julio/g,"9 de julio");
@@ -94,12 +104,12 @@ function aliasPlace(s){
   return t;
 }
 
-/* ===== state ===== */
+/* state */
 let USER_POS=null, NEAR_ACTIVE=false;
-const NEAR_RADIUS_KM=1.0;
+const NEAR_RADIUS_KM=1.5;
 let DATA=[], IDX=[], LOADED=false;
 
-/* ===== load ===== */
+/* load */
 fetch(CSV_URL,{cache:"no-store"})
   .then(r=>r.text())
   .then(t=>{
@@ -116,7 +126,7 @@ fetch(CSV_URL,{cache:"no-store"})
   })
   .catch(()=>alert("No pude cargar la base (CSV)."));
 
-/* ===== nlp ===== */
+/* nlp */
 function understand(raw){
   const t0=(raw||"").trim();
   const t=aliasPlace(t0);
@@ -140,7 +150,7 @@ function moveZoneIfLooksLikeName(q,z){
   return {q,z};
 }
 
-/* ubicación estricta */
+/* ubicación */
 function locationMatch(idx,zona){
   if(!zona) return true;
   const f=IDX[idx].dirbar;
@@ -151,11 +161,9 @@ function locationMatch(idx,zona){
     if(!(a&&b)) return false;
     return (f.includes(a) && f.includes(b));
   }
-
   const zWords=norm(zn).split(/\s+/).filter(Boolean);
   const fWords=new Set(f.split(/\s+/));
   if(zWords.some(w=>fWords.has(w))) return true;
-
   for(let i=0;i<zWords.length-1;i++){
     const bi=zWords[i]+" "+zWords[i+1];
     if(f.includes(bi)) return true;
@@ -163,7 +171,7 @@ function locationMatch(idx,zona){
   return f.includes(norm(zn));
 }
 
-/* ===== ui ===== */
+/* ui */
 document.getElementById('goBtn').addEventListener('click',buscar);
 document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('qall').value="";
@@ -181,7 +189,7 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   },()=>alert('No pude obtener tu ubicación. Permití acceso al GPS.'),{enableHighAccuracy:true,timeout:8000,maximumAge:0});
 });
 
-/* ===== search ===== */
+/* search */
 function buscar(){
   if(!LOADED){ alert("Cargando datos…"); return; }
 
@@ -196,7 +204,7 @@ function buscar(){
   document.getElementById('chips').innerHTML=[
     z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
     q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:'',
-    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos (≤1 km)</div>`:''
+    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos (≤1.5 km)</div>`:''
   ].join('');
 
   render(buscarInterno(q,z));
@@ -236,9 +244,8 @@ function buscarInterno(q,z){
       }
     }
 
-    // base para consultas SOLO de ubicación (sin intención): si matchea zona o está en radio, que pase
     if(score===0 && onlyLocation){
-      const passByZone = z ? locationMatch(idx,z) : true;
+      const passByZone = z ? locationMatch(idx,z) : false;
       const passByNear = (NEAR_ACTIVE && distKm!==null && distKm<=NEAR_RADIUS_KM);
       if(passByZone || passByNear) score=1;
     }
@@ -247,11 +254,11 @@ function buscarInterno(q,z){
   })
   .filter(x=>x.score>0)
   .sort((a,b)=>b.score-a.score)
-  .slice(0,20)
+  .slice(0,30)
   .map(x=>x.l);
 }
 
-/* ===== render ===== */
+/* render */
 function render(items){
   const box=document.getElementById('results');
   if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
@@ -274,7 +281,7 @@ function render(items){
   }).join("");
 }
 
-/* ===== mic ===== */
+/* mic */
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
