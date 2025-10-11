@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — versión estable final</title>
+<title>Aquí Nomás — versión estable</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,11 +30,11 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — versión estable final</h1>
+  <h1>🏷️ Aquí Nomás — versión estable</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'Santa Fe', 'Corrientes y 9 de Julio', 'cerca'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'Santa Fe', 'Santa Fe y Cerrito', 'cerca', 'comiditas'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -50,72 +50,126 @@ h1{font-size:20px;margin:0 0 14px}
 <script>
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
 
-const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","cerca","porfavor","porfa","avenida","sobre","calle"]);
-const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"").replace(/\s+/g," ").trim();
+const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle"]);
+const norm=s=>String(s||"").toLowerCase()
+  .normalize("NFD").replace(/\p{Diacritic}/gu,"")
+  .replace(/[.,;:]+/g," ")
+  .replace(/\s+/g," ").trim();
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));}
+
 function parseCSV(txt){
   const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
-function parseCoord(v){if(!v)return NaN;let s=String(v).replace(',','.');let n=parseFloat(s);if(Math.abs(n)>180)n/=1e6;return n;}
+function parseCoord(v){if(v==null||v==="")return NaN;let s=String(v).replace(',','.');let n=Number(s);if(Number.isNaN(n)){const neg=/^-/.test(s);const digits=s.replace(/[^0-9]/g,'');if(digits.length>=7){n=parseInt(digits,10)/1e6;if(neg)n=-Math.abs(n);} } if(Math.abs(n)>180)n/=1e6;return n;}
 function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
 
 let USER_POS=null,NEAR_ACTIVE=false;
 const NEAR_RADIUS_KM=1.0;
 let DATA=[];
-fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);console.log("CSV cargado",DATA.length);});
+fetch(CSV_URL,{cache:"no-store"}).then(r=>r.text()).then(t=>{DATA=parseCSV(t);});
 
 function understand(raw){
-  const t0=(raw||"").trim(),t=norm(t0);
-  let zona="",qText=t0;
-  let m=t.match(/(?:en|por|sobre)\s+([a-z0-9\s]+)$/i);
-  if(m){zona=(m[1]||"").trim();qText=t0.replace(new RegExp(m[0],'i'),'').trim();}
-  else{const words=t.split(/\s+/).filter(Boolean);if(words.length>0&&(words.length<=4||t.includes(" y "))){zona=t0.trim();qText="";}}
-  return{q:qText,z:zona};
+  const t0=(raw||"").trim(); const t=norm(t0);
+  let zona="", qText=t0, wantsNear=false;
+
+  if(/\bcerca\b/.test(t)) wantsNear=true;
+
+  let m=t.match(/(?:estoy|vivo|me\s+encuentro)?\s*(?:en|por|sobre)\s+([a-z0-9\s]+)$/i);
+  if(m){ zona=(m[1]||"").trim(); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
+  else{
+    const words=t.split(/\s+/).filter(Boolean);
+    if(words.length>0&&(words.length<=4||t.includes(" y "))){
+      zona=t0.trim(); qText="";
+    }
+  }
+  return { q:qText, z:zona, wantsNear };
 }
 
 function locationMatch(row,zona){
-  if(!zona)return true;
-  const f=norm(((row.direccion||"")+" "+(row.barrio||"")).replace(/,+/g," ").replace(/\s+/g," ").trim());
+  if(!zona) return true;
+  const f=norm(((row.direccion||"")+" "+(row.barrio||"")).replace(/,+/g," "));
   const z=norm(zona);
-  if(f.includes(z))return true;
+  if(!z) return true;
+
+  if(f.includes(z)) return true;
+
   if(z.includes(" y ")){
     const [a,b]=z.split(" y ").map(x=>x.trim()).filter(Boolean);
-    if(a&&b){if((f.includes(a)&&f.includes(b))||(f.includes(b)&&f.includes(a)))return true;}
+    if(a&&b){ if( (f.includes(a)&&f.includes(b)) || (f.includes(b)&&f.includes(a)) ) return true; }
   }
-  return z.split(/\s+/).filter(Boolean).some(p=>f.includes(p));
+
+  const parts=z.split(/\s+/).filter(Boolean);
+  return parts.some(p=>f.includes(p));
 }
 
 document.getElementById('goBtn').addEventListener('click',buscar);
-document.getElementById('clearBtn').addEventListener('click',()=>{document.getElementById('qall').value="";document.getElementById('results').innerHTML="";document.getElementById('chips').innerHTML="";NEAR_ACTIVE=false;document.getElementById('gpsHint').style.display='none';});
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  document.getElementById('qall').value="";
+  document.getElementById('results').innerHTML="";
+  document.getElementById('chips').innerHTML="";
+  NEAR_ACTIVE=false; document.getElementById('gpsHint').style.display='none';
+});
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
-document.getElementById('locBtn').addEventListener('click',()=>{if(!navigator.geolocation){alert('Tu navegador no soporta geolocalización.');return;}navigator.geolocation.getCurrentPosition(pos=>{USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude};NEAR_ACTIVE=true;document.getElementById('gpsHint').style.display='block';buscar();},()=>alert('No pude obtener tu ubicación. Permití acceso al GPS.'),{enableHighAccuracy:true,timeout:8000,maximumAge:0});});
+document.getElementById('locBtn').addEventListener('click',()=>{
+  if(!navigator.geolocation){alert('Tu navegador no soporta geolocalización.');return;}
+  navigator.geolocation.getCurrentPosition(pos=>{
+    USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    NEAR_ACTIVE=true; document.getElementById('gpsHint').style.display='block';
+    buscar();
+  },()=>alert('No pude obtener tu ubicación. Permití acceso al GPS.'),{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+});
 
 function buscar(){
   const raw=document.getElementById('qall').value;
-  let {q,z}=understand(raw);
-  if(NEAR_ACTIVE)z="";
-  document.getElementById('chips').innerHTML=[z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:'',(NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:''].join('');
+  let {q,z,wantsNear}=understand(raw);
+  if(wantsNear && USER_POS) { NEAR_ACTIVE=true; document.getElementById('gpsHint').style.display='block'; }
+  if(NEAR_ACTIVE) z="";
+
+  document.getElementById('chips').innerHTML=[
+    z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
+    q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:'',
+    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:''
+  ].join('');
+
   render(buscarInterno(q,z));
 }
 
 function buscarInterno(q,z){
+  const qnorm=norm(q);
   const qt=toks(q);
+
   return DATA.map(l=>{
-    const full=norm((l.nombre_local||"")+" "+(l.rubro||"")+" "+(l.keywords||""));
+    const name=norm(l.nombre_local||"");
+    const rub=norm(l.rubro||"");
+    const kw =norm(l.keywords||"");
+
     let score=0;
-    qt.forEach(t=>{if(full.includes(t))score++;});
-    if(!qt.length&&q){if(full.includes(norm(q)))score+=2;}
-    if(z&&!locationMatch(l,z))score=-1;
-    const lat=parseCoord(l.lat),lng=parseCoord(l.lng);
+
+    if(qnorm && name===qnorm) score+=5;           // nombre exacto (ej: "comiditas")
+    qt.forEach(t=>{ if(name.includes(t))score+=2; if(kw.includes(t))score+=1.5; if(rub.includes(t))score+=1; });
+
+    if(z && !locationMatch(l,z)) score=-1;
+
+    const lat=parseCoord(l.lat), lng=parseCoord(l.lng);
     let distKm=null;
-    if(score>=0&&USER_POS&&!isNaN(lat)&&!isNaN(lng)){
+    if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
       distKm=haversineKm(USER_POS,{lat,lng});
-      if(NEAR_ACTIVE){if(distKm>NEAR_RADIUS_KM+0.3)score=-1;else score+=2;}else{const bonus=Math.max(0,2-(distKm/1.5));score+=bonus;}
+      if(NEAR_ACTIVE){
+        if(distKm<=NEAR_RADIUS_KM) score+=3; else score=-1;
+      }else{
+        const bonus=Math.max(0, 2 - (distKm/1.5));
+        score+=bonus;
+      }
     }
-    return{l:{...l,_distKm:distKm},score};
-  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(x=>x.l);
+
+    return { l:{...l,_distKm:distKm}, score };
+  })
+  .filter(x=>x.score>0)
+  .sort((a,b)=>b.score-a.score)
+  .slice(0,12)
+  .map(x=>x.l);
 }
 
 function render(items){
