@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo estable</title>
+<title>Aquí Nomás — Demo (intención + cercanos)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -23,18 +23,18 @@ h1{font-size:20px;margin:0 0 14px}
 .card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0}
 .title{font-weight:700;margin-bottom:4px}
 .title span{font-weight:600;color:#555}
-.promo{margin:6px 0 10px;color:var(--pri)}
+.promo{margin:6px 0 10px;color:#0b5cff}
 .meta{font-size:12px;color:#566}
 .empty{padding:12px;color:#666}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo estable</h1>
+  <h1>🏷️ Aquí Nomás — demo</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar por avenida Santa Fe' o 'santa fe y laprida'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar', 'tornillos en Devoto', 'comercios más cercanos', 'santa fe y laprida'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -42,37 +42,58 @@ h1{font-size:20px;margin:0 0 14px}
       <button id="cpyBtn" class="btn secondary" title="Copiar link con la búsqueda">Copiar link</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Usando tu ubicación para ordenar por cercanía.</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Usando tu ubicación para priorizar cercanos.</div>
   </div>
 
   <div id="results" class="box"></div>
 </div>
 
 <script>
-// === URL de tu Google Sheets PUBLICADO (output=csv) ===
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
-// ======================================================
+// ==== PONÉ ACÁ TU CSV (recomendado: export) ====
+const CSV_URL = "https://docs.google.com/spreadsheets/d/1eQ_uHV4qk7hDHph1vBiUFDs89hTiwRDjHre7QAAsrSk/export?format=csv&gid=0";
+// Si preferís publish: .../pub?gid=...&single=true&output=csv
+// =================================================
 
-// utilidades
 const STOP = new Set([
   "hola","buenas","buenos","dias","tardes","noches",
-  "necesito","quiero","busco","busca","buscar","buscando","buscaba","comprar","venta",
-  "un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del",
+  "necesito","quiero","quisiera","busco","busca","buscar","buscando","buscaba","comprar","venta",
+  "un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del",
   "estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa",
-  "avenida","av","sobre","altura","calle"
+  "avenida","av","sobre","altura","calle","por","lo","los","las"
 ]);
 
-const ACTION_TOKENS = new Set(["almorzar","almuerzo","comer","cenar","cena","desayunar","desayuno"]);
+// Normalización básica (acentos + minúsculas)
+const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
+
+// Canonicalización muy simple (quita plurales comunes)
+function canon(t){
+  t = norm(t);
+  if (t.endsWith('es') && t.length>4) return t.slice(0,-2);
+  if (t.endsWith('s') && t.length>4)  return t.slice(0,-1);
+  return t;
+}
+
+function toks(s){
+  return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ")
+    .split(/\s+/).filter(t=>t && !STOP.has(t)).map(canon);
+}
+
+// —— mapeo intención→rubro(s) (incluye singular/plural por canon)
 const INTENT2RUBROS = {
   "almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],
   "cenar":["gastronom"],"cena":["gastronom"],"desayunar":["gastronom"],"desayuno":["gastronom"],
-  "clavos":["ferreter"],"tornillos":["ferreter"],"ferreteria":["ferreter"],
-  "libros":["librer"],"resma":["librer"],"papel":["librer"],"a4":["librer"],
-  "flores":["florer"],"flor":["florer"]
+  "tornillo":["ferreter"],"clavo":["ferreter"],"ferreteria":["ferreter"],
+  "libro":["librer"],"resma":["librer"],"papel":["librer"],"a4":["librer"],
+  "flor":["florer"]
 };
 
-const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
-function toks(s){ return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t && !STOP.has(t)); }
+const ACTION_TOKENS = new Set(["almorzar","almuerzo","comer","cenar","cena","desayunar","desayuno"]);
+
+// —— “cercanos” activa modo solo-cercanos
+function isNearOnly(raw){
+  const t = norm(raw);
+  return /mas\s+cercan|más\s+cercan|cercan[oa]s\b|cerca\s+m[ií]a/.test(t);
+}
 
 function parseCSV(txt){
   const rows = txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
@@ -119,7 +140,7 @@ function haversineKm(a, b){
   return 2*R*Math.asin(Math.min(1, Math.sqrt(A)));
 }
 
-// entender frase + fallback de zona corta
+// —— entender frase (zona + intención) con fallback
 function understand(raw){
   const t0=(raw||"").trim(), t=norm(t0);
   let zona="", qText=t0;
@@ -168,7 +189,7 @@ function locationMatch(row, zona){
   return nb.includes(nz) || nd.includes(nz) || nz.includes(nb) || nz.includes(nd);
 }
 
-// ==== CARGA DE CSV con fallback de proxy (antibloqueos) ====
+// ==== CARGA CSV (con proxy opcional por si Google se pone difícil) ====
 let DATA = [];
 const PROXY = u => 'https://r.jina.ai/' + u.replace(/^https?:\/\//,'https://');
 
@@ -197,7 +218,7 @@ async function fetchCSV(url){
     console.log('CSV cargado. Filas:', DATA.length);
   }catch(e){
     console.error('Error cargando CSV:', e);
-    alert('No pude cargar la base (CSV). Verificá que esté "Publicada en la web" y el gid sea el correcto.');
+    alert('No pude cargar la base (CSV). Revisá permisos o el gid.');
   }
 })();
 
@@ -226,29 +247,45 @@ document.getElementById('locBtn').addEventListener('click', ()=>{
 
 // ==== BUSCAR ====
 function buscar(){
-  try{
-    const raw=document.getElementById('qall').value;
-    const {q,z}=understand(raw);
-    document.getElementById('chips').innerHTML=[
-      z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
-      q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:''
-    ].join('');
-    render(buscarInterno(q,z));
-  }catch(e){ console.error('Error en buscar():', e); alert('Hubo un error al procesar la búsqueda.'); }
+  const raw=document.getElementById('qall').value;
+  const nearOnly = isNearOnly(raw);
+  const {q,z}=understand(raw);
+
+  document.getElementById('chips').innerHTML=[
+    nearOnly?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:'',
+    z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
+    q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:''
+  ].join('');
+
+  render(buscarInterno(q,z,nearOnly), nearOnly);
 }
 
-function buscarInterno(q,z){
+function buscarInterno(q,z,nearOnly){
+  // Modo SOLO CERCANOS: lista corta ordenada por distancia, sin intención ni zona
+  if(nearOnly){
+    if(!USER_POS){ return []; }
+    return DATA.map(l=>{
+      const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
+      let distKm = ( !isNaN(lat)&&!isNaN(lng) ) ? haversineKm(USER_POS,{lat,lng}) : Infinity;
+      return {l:{...l,_distKm:distKm,_plat:lat,_plng:lng}};
+    }).filter(x=>isFinite(x.l._distKm))
+      .sort((a,b)=>a.l._distKm - b.l._distKm)
+      .slice(0,8)
+      .map(x=>x.l);
+  }
+
   const qt=toks(q);
   const wants = desiredRubros(qt);
   const hasAction = qt.some(t=>ACTION_TOKENS.has(t));
   const noIntent = qt.length===0;
 
+  // Si la intención es SOLO “almorzar” (u otra acción) sin zona:
+  // devolvemos rubro compatible y priorizamos por cercanía si hay GPS
   return DATA.map(l=>{
-      const rubroNorm = norm(l.rubro||"");
-      const blobIntent = norm((l.rubro||"")+" "+(l.keywords||"")); // solo rubro+keywords
+      const rubroNorm = canon(l.rubro||"");
+      const blobIntent = (canon(l.rubro||"")+" "+canon(l.keywords||"")); // intención contra rubro+keywords
       let score = 0;
 
-      // 1) si hay intención: exigir rubro compatible o keywords que contengan verbo de acción
       if(wants.size){
         let ok=false;
         for(const w of wants){ if(rubroNorm.includes(w)) { ok=true; break; } }
@@ -259,23 +296,20 @@ function buscarInterno(q,z){
         if(!ok) score=-1;
       }
 
-      // 2) score por tokens solo contra rubro+keywords (no arrastre por dirección)
       if(score>=0){ qt.forEach(t=>{ if(blobIntent.includes(t)) score += 1; }); }
 
-      // 3) filtro zona
       if(score>=0 && z && !locationMatch(l,z)) score = -1;
 
-      // 4) bonus cercanía
       const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
       let distKm=null;
       if(score>=0 && USER_POS && !isNaN(lat) && !isNaN(lng)){
         distKm=haversineKm(USER_POS,{lat,lng});
-        const bonus=Math.max(0, 2 - (distKm/1.5));
+        const bonus=Math.max(0, 2 - (distKm/1.5)); // empuja cercanos arriba
         score+=bonus;
       }
 
-      // 5) sin intención pero con zona o GPS: dejar pasar mínimo
-      if(score===0 && noIntent && (z || USER_POS)) score=0.1;
+      // Sin intención y sin zona: no listamos “todo”, solo si hay alguna coincidencia mínima
+      if(score===0 && noIntent) score = -1;
 
       return { l:{...l,_distKm:distKm,_plat:lat,_plng:lng}, score };
     })
@@ -285,9 +319,16 @@ function buscarInterno(q,z){
     .map(x=>x.l);
 }
 
-function render(items){
+function render(items, nearOnly){
   const box=document.getElementById('results');
-  if(!items.length){ box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>'; return; }
+  if(!items.length){
+    if(nearOnly && !USER_POS){
+      box.innerHTML='<div class="empty">Para “cercanos” necesitás activar 📍 Ubicación.</div>';
+    }else{
+      box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';
+    }
+    return;
+  }
   box.innerHTML=items.map(r=>{
     const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
     const hasCoords=!isNaN(r._plat)&&!isNaN(r._plng);
@@ -299,6 +340,7 @@ function render(items){
       <div class="title">${name} — <span>${r.rubro||''}</span></div>
       <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
       ${r.horario?`<div>Horario: ${r.horario}</div>`:''}
+      ${r.promo?`<div class="promo">Promo: ${r.promo}</div>`:''}
       ${r.promo_texto?`<div class="promo">Promo: ${r.promo_texto}</div>`:''}
       ${dist}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
@@ -323,3 +365,7 @@ function render(items){
 </script>
 </body>
 </html>
+
+
+
+
