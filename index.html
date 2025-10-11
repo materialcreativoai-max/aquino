@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — demo v5 (corrección final)</title>
+<title>Aquí Nomás — demo v6 (zona por frase corta + intersecciones)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo v5 (corrección final)</h1>
+  <h1>🏷️ Aquí Nomás — demo v6</h1>
 
   <div class="box">
     <div class="row">
@@ -41,7 +41,7 @@ h1{font-size:20px;margin:0 0 14px}
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales dentro de 1 km (10-12 cuadras).</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales dentro de ~1 km (≈10–12 cuadras).</div>
   </div>
 
   <div id="results" class="box"></div>
@@ -55,7 +55,11 @@ const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u
 const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","cerca","porfavor","porfa","avenida","sobre","calle"]);
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));}
-function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
+function parseCSV(txt){
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
 function parseCoord(v){if(!v)return NaN;let s=String(v).replace(',','.');let n=parseFloat(s);if(Math.abs(n)>180)n/=1e6;return n;}
 function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
 
@@ -64,35 +68,63 @@ const NEAR_RADIUS_KM=1.2;
 let DATA=[];
 fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);console.log("CSV cargado",DATA.length);});
 
-// === Analizador simple de frase ===
+// === Analizador de frase con fallback a ZONA para frases cortas / intersecciones ===
 function understand(raw){
   const t0=(raw||"").trim(),t=norm(t0);
   let zona="",qText=t0;
-  const m=t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)/i);
-  if(m){zona=(m[1]||"").trim();qText=t0.replace(new RegExp(m[0],'i'),'').trim();}
+
+  // Caso clásico con preposición
+  let m=t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)/i);
+  if(m){
+    zona=(m[1]||"").trim();
+    qText=t0.replace(new RegExp(m[0],'i'),'').trim();
+  }else{
+    // Fallback: si la frase es corta (≤4 palabras) o contiene “ y ”, tratarla como zona
+    const words=t.split(/\s+/).filter(Boolean);
+    const corta = words.length>0 && words.length<=4;
+    if(corta || t.includes(" y ")){
+      zona=t0.trim();
+      qText=""; // buscamos solo por ubicación
+    }
+  }
   return{q:qText,z:zona};
 }
 
-// === Coincidencia flexible de ubicaciones ===
+// === Coincidencia flexible de ubicaciones (incluye intersecciones en cualquier orden) ===
 function locationMatch(row,zona){
   if(!zona)return true;
   const f=norm((row.direccion||"")+" "+(row.barrio||""));
   const z=norm(zona);
-  // Intersecciones en cualquier orden
+
+  // Intersección: “a y b” en cualquier orden
   if(z.includes(" y ")){
-    const [a,b]=z.split(" y ").map(x=>x.trim());
+    const [a,b]=z.split(" y ").map(x=>x.trim()).filter(Boolean);
+    if(!a||!b) return f.includes(z);
     return (f.includes(a)&&f.includes(b))||(f.includes(b)&&f.includes(a));
   }
-  // Coincidencia parcial tolerante (ej. “santa fe” encuentra “laprida y santa fe”)
+  // Frase/calle suelta: coincidencia parcial por palabras
   const palabras=z.split(/\s+/).filter(Boolean);
   return palabras.some(p=>f.includes(p));
 }
 
 // === Interfaz ===
 document.getElementById('goBtn').addEventListener('click',buscar);
-document.getElementById('clearBtn').addEventListener('click',()=>{document.getElementById('qall').value="";document.getElementById('results').innerHTML="";document.getElementById('chips').innerHTML="";NEAR_ACTIVE=false;document.getElementById('gpsHint').style.display='none';});
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  document.getElementById('qall').value="";
+  document.getElementById('results').innerHTML="";
+  document.getElementById('chips').innerHTML="";
+  NEAR_ACTIVE=false;
+  document.getElementById('gpsHint').style.display='none';
+});
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
-document.getElementById('locBtn').addEventListener('click',()=>{if(!navigator.geolocation){alert('Tu navegador no soporta geolocalización.');return;}navigator.geolocation.getCurrentPosition(pos=>{USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude};NEAR_ACTIVE=true;document.getElementById('gpsHint').style.display='block';buscar();},()=>alert('No pude obtener tu ubicación. Permití acceso al GPS.'),{enableHighAccuracy:true,timeout:8000,maximumAge:0});});
+document.getElementById('locBtn').addEventListener('click',()=>{
+  if(!navigator.geolocation){alert('Tu navegador no soporta geolocalización.');return;}
+  navigator.geolocation.getCurrentPosition(
+    pos=>{USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude};NEAR_ACTIVE=true;document.getElementById('gpsHint').style.display='block';buscar();},
+    ()=>alert('No pude obtener tu ubicación. Permití acceso al GPS.'),
+    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
+  );
+});
 
 function buscar(){
   const raw=document.getElementById('qall').value;
@@ -110,21 +142,26 @@ function buscarInterno(q,z){
   return DATA.map(l=>{
     const full=norm((l.nombre_local||"")+" "+(l.rubro||"")+" "+(l.keywords||""));
     let score=0;
+
+    // Intención (si la hay) sólo matchea con nombre/rubro/keywords — no dirección
     qt.forEach(t=>{if(full.includes(t))score++;});
     if(!qt.length&&q){if(full.includes(norm(q)))score+=2;}
+
+    // Filtro de zona (dirección+barrio)
     if(z&&!locationMatch(l,z))score=-1;
+
+    // Cercanía
     const lat=parseCoord(l.lat),lng=parseCoord(l.lng);
     let distKm=null;
     if(score>=0&&USER_POS&&!isNaN(lat)&&!isNaN(lng)){
       distKm=haversineKm(USER_POS,{lat,lng});
       if(NEAR_ACTIVE){
-        if(distKm>NEAR_RADIUS_KM+0.3)score=-1;
-        else score+=2;
+        if(distKm>NEAR_RADIUS_KM+0.3)score=-1; else score+=2;
       }else{
-        const bonus=Math.max(0,2-(distKm/1.5));
-        score+=bonus;
+        const bonus=Math.max(0,2-(distKm/1.5)); score+=bonus;
       }
     }
+
     return{l:{...l,_distKm:distKm},score};
   }).filter(x=>x.score>0)
     .sort((a,b)=>b.score-a.score)
