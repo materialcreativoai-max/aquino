@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Demo estable (anti-CORS/caché)</title>
+<title>Aquí Nomás — demo estable (intención + cercanos)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -34,7 +34,7 @@ h1{font-size:20px;margin:0 0 14px}
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar', 'tornillos en Devoto', 'comercios más cercanos', 'santa fe y laprida'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar', 'comiditas', 'gastronomía', 'tornillos en Devoto', 'más cercanos'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -49,47 +49,41 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-// ====== CONFIG: fuentes de datos ======
-const SHEET_ID = "1eQ_uHV4qk7hDHph1vBiUFDs89hTiwRDjHre7QAAsrSk"; // tu sheet ID
-const GID = "0"; // la pestaña con tus locales
-
-// (OPCIONAL) si tenés el link de "Publicar en la web" (termina en output=csv), pegalo acá:
-const PUBLISH_CSV = ""; 
-// ej: "https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?gid=0&single=true&output=csv"
-
-// (OPCIONAL) si tenés un mirror en GitHub Raw, pegalo acá:
-const MIRROR_CSV = ""; 
-// ej: "https://raw.githubusercontent.com/tuuser/turepo/main/locales.csv"
-
-// Export directo + proxy anti-CORS (no requiere “Publicar en la web”, sí compartir “Cualquiera con enlace – Lector”)
+// ====== FUENTE DE DATOS (con proxy anti-CORS) ======
+const SHEET_ID = "1eQ_uHV4qk7hDHph1vBiUFDs89hTiwRDjHre7QAAsrSk";
+const GID = "0";
 const EXPORT_CSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 const PROXY = u => 'https://r.jina.ai/' + u.replace(/^https?:\/\//,'https://');
-
-// Orden de prueba (se prueba la primera que responda)
-const CSV_SOURCES = [
-  ... (PUBLISH_CSV ? [PUBLISH_CSV, PROXY(PUBLISH_CSV)] : []),
-  PROXY(EXPORT_CSV),
-  ...(MIRROR_CSV ? [MIRROR_CSV] : [])
-];
+const CSV_URL = PROXY(EXPORT_CSV);
 
 // ====== utilidades de texto ======
-const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","un","una","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa","avenida","av","sobre","altura","calle","por","lo","los","las"]);
+const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","quisiera","busco","buscar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","estamos","aca","aqui","ahora","cerca","porfavor","porfa","avenida","av","sobre","altura","calle","lo","las"]);
 const norm = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function canon(t){ if(t.endsWith('es')&&t.length>4)return t.slice(0,-2); if(t.endsWith('s')&&t.length>4)return t.slice(0,-1); return t; }
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t)).map(canon);}
 
+// —— mapeo intención→rubro(s) ampliado (singular/plural/variantes coloquiales)
 const INTENT2RUBROS = {
-  "almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],"comida":["gastronom"],"cenar":["gastronom"],"cena":["gastronom"],
+  // comida
+  "almorzar":["gastronom"],"almuerzo":["gastronom"],"comer":["gastronom"],"comida":["gastronom"],"menú":["gastronom"],"menu":["gastronom"],
+  "gastronomia":["gastronom"],"gastronomico":["gastronom"],"comidita":["gastronom"],
+  // ferretería
   "tornillo":["ferreter"],"clavo":["ferreter"],"ferreteria":["ferreter"],
+  // librería
   "libro":["librer"],"resma":["librer"],"papel":["librer"],"a4":["librer"],
+  // florería
   "flor":["florer"],"floreria":["florer"]
 };
-const ACTION_TOKENS=new Set(["almorzar","almuerzo","comer","comida","cenar","cena"]);
+const ACTION_TOKENS = new Set(["almorzar","almuerzo","comer","comida","cenar","cena","menu","menú","gastronomia","gastronomico","comidita"]);
 
 const keyNorm=k=>(k||"").toLowerCase().replace(/[^a-z]/g,"");
 function getField(obj,target){const want=keyNorm(target);for(const k of Object.keys(obj)){if(keyNorm(k)===want)return obj[k];}}
 
-function parseCSV(txt){const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])))}
+function parseCSV(txt){
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
 
 // ====== coords / distancia ======
 function parseCoordRaw(v){if(v==null)return NaN;let s=String(v).trim().replace(',','.');if(!s)return NaN;let n=Number(s);if(Number.isNaN(n)){const neg=s.trim().startsWith('-');const digits=s.replace(/[^0-9]/g,'');if(digits.length>=7){n=parseInt(digits,10)/1e6;if(neg)n=-Math.abs(n);}else if(/^\-?\d+$/.test(s)){n=parseInt(s,10);}}if(Math.abs(n)>180)n=n/1e6;return n;}
@@ -103,65 +97,55 @@ let USER_POS=null;
 function understand(raw){
   const t0=(raw||"").trim(), t=norm(t0);
   let zona="", qText=t0;
+
+  // patrones de zona
   let m=t.match(/(?:estoy|vivo|me\s+encuentro)\s+en\s+([a-záéíóúñ\s]+?)(?=\s*(?:y\s+)?(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
   if(!m) m=t.match(/(?:^|\s)(?:en|por|de|sobre)\s+([a-záéíóúñ\s]+?)(?=\s+(?:busc\w*|necesit\w*|quiero|ir|comer|almorzar|cenar)\b|[,.!?]|$)/i);
   if(!m) m=t.match(/(?:almorzar|cenar|comer|buscar|ir|comprar|necesito|quiero)\s+(?:algo\s+)?(?:en|por|sobre)\s+([a-záéíóúñ\s]+)$/i);
   if(!m) m=t.match(/cerca\s+de\s+([a-záéíóúñ\s]+)$/i);
+
   if(m){ zona=(m[1]||"").trim().split(/\s+/).slice(0,4).join(" "); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
-  qText=qText.replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"").replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"").replace(/^(?:busc\w*|necesit\w*|quiero)\b[\s,]*/i,"").replace(/^de\s+/i,"").trim();
+
+  qText=qText
+    .replace(/^(?:hola|buenas|buenos dias|buenas tardes|buenas noches)\b[\s,]*/i,"")
+    .replace(/^(?:estoy|estamos|vivo|me\s+encuentro)\b[\s,]*/i,"")
+    .replace(/^(?:busc\w*|necesit\w*|quiero)\b[\s,]*/i,"")
+    .replace(/^de\s+/i,"").trim();
+
   return {q:qText,z:zona};
 }
-function desiredRubros(tokens){const wants=new Set();for(const t of tokens){const rs=INTENT2RUBROS[t];if(rs)rs.forEach(r=>wants.add(r));}return wants;}
-function locationMatch(row,zona){if(!zona)return true;const zt=toks(zona),tb=toks(row.barrio||""),td=toks(row.direccion||"");for(const z of zt){if(tb.includes(z)||td.includes(z))return true;}const nb=norm(row.barrio||""),nd=norm(row.direccion||""),nz=norm(zona);return nb.includes(nz)||nd.includes(nz)||nz.includes(nb)||nz.includes(nd);}
 
-// ====== loader robusto ======
-async function fetchWithTimeout(url, ms=8000){
-  const u = new URL(url);
-  u.searchParams.set('_t', Date.now().toString()); // rompe-caché
-  const ctrl = new AbortController();
-  const id = setTimeout(()=>ctrl.abort(), ms);
-  try{
-    const r = await fetch(u.toString(), { cache:'no-store', signal:ctrl.signal });
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    return await r.text();
-  } finally {
-    clearTimeout(id);
-  }
+// —— detectar “solo cercanos”
+function isNearOnly(raw){
+  const t = norm(raw);
+  return /(?:mas|más)\s+cerca(?:nos)?\b|cercan[oa]s\b|cerca\s+m[ií]o\b|lo\s+(?:mas|más)\s+cerca\b|proxim[oa]s\b/.test(t);
 }
 
-async function fetchFirstAvailable(urls){
-  const errors=[];
-  for(const base of urls){
-    for(let attempt=1; attempt<=2; attempt++){
-      try{
-        console.log(`Intentando CSV [${attempt}/2]:`, base);
-        const txt = await fetchWithTimeout(base, 8000 + attempt*2000);
-        if (!txt || !txt.trim()) throw new Error('CSV vacío');
-        // sanity check mínimo: que tenga encabezados
-        if (!/nombre|rubro|keywords|barrio|direccion/i.test(txt.split('\n')[0]||'')) {
-          console.warn('Encabezado no esperado, igual continúo:', txt.split('\n')[0]);
-        }
-        return txt;
-      }catch(e){
-        console.warn('Fallo en', base, e);
-        errors.push(`${base} → ${e}`);
-        await new Promise(r=>setTimeout(r, 400*attempt)); // pequeño backoff
-      }
-    }
-  }
-  throw new Error('Todas las fuentes fallaron:\n' + errors.join('\n'));
+function desiredRubros(tokens){
+  const wants=new Set();
+  for(const t of tokens){ const rs=INTENT2RUBROS[t]; if(rs) rs.forEach(r=>wants.add(r)); }
+  return wants;
 }
 
+function locationMatch(row,zona){
+  if(!zona) return true;
+  const zt=toks(zona), tb=toks(row.barrio||""), td=toks(row.direccion||"");
+  for(const z of zt){ if(tb.includes(z)||td.includes(z)) return true; }
+  const nb=norm(row.barrio||""), nd=norm(row.direccion||""), nz=norm(zona);
+  return nb.includes(nz)||nd.includes(nz)||nz.includes(nb)||nz.includes(nd);
+}
+
+// ====== cargar CSV ======
 let DATA=[];
 (async function load(){
   try{
-    const sources = CSV_SOURCES.length ? CSV_SOURCES : [PROXY(EXPORT_CSV)];
-    const txt = await fetchFirstAvailable(sources);
+    const r = await fetch(CSV_URL, { cache:'no-store' });
+    const txt = await r.text();
     DATA = parseCSV(txt);
     console.log('CSV cargado. Filas:', DATA.length);
   }catch(e){
     console.error('Error cargando CSV:', e);
-    alert('No pude cargar la base (CSV). Revisá: compartir “Cualquiera con enlace – Lector” o pegá el link de “Publicar en la web”.');
+    alert('No pude cargar la base (CSV).');
   }
 })();
 
@@ -192,47 +176,76 @@ document.getElementById('locBtn').addEventListener('click', ()=>{
 function buscar(){
   const raw=document.getElementById('qall').value;
   const {q,z}=understand(raw);
+  const nearOnly = isNearOnly(raw) || (USER_POS && norm(raw)===""); // 📍 + input vacío = cercanos
+
   document.getElementById('chips').innerHTML=[
+    nearOnly?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:'',
     z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
     q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:''
   ].join('');
-  render(buscarInterno(q,z));
+
+  render(buscarInterno(q,z,nearOnly), nearOnly);
 }
 
-function desiredRubros(tokens){const wants=new Set();for(const t of tokens){const rs=INTENT2RUBROS[t];if(rs)rs.forEach(r=>wants.add(r));}return wants;}
+function buscarInterno(q,z,nearOnly){
+  // ——— SOLO CERCANOS ———
+  if(nearOnly){
+    if(!USER_POS) return [];
+    return DATA.map(l=>{
+      const lat=parseLat(getField(l,'lat')), lng=parseLng(getField(l,'lng'));
+      let distKm = (!isNaN(lat)&&!isNaN(lng)) ? haversineKm(USER_POS,{lat,lng}) : Infinity;
+      return { l:{...l,_distKm:distKm,_plat:lat,_plng:lng} };
+    }).filter(x=>isFinite(x.l._distKm))
+      .sort((a,b)=>a.l._distKm - b.l._distKm)
+      .slice(0,8) // <- SOLO 8 MÁS CERCANOS
+      .map(x=>x.l);
+  }
 
-function buscarInterno(q,z){
+  // ——— INTENCIÓN / ZONA ———
   const qt=toks(q);
   const wants=desiredRubros(qt);
   const noIntent=qt.length===0;
 
   return DATA.map(l=>{
     const rubro=canon(l.rubro||"");
-    const blob=canon((l.rubro||"")+" "+(l.keywords||"")); // solo rubro+keywords para intención
+    const blob=canon((l.rubro||"")+" "+(l.keywords||""));
     let score=0;
 
+    // si hay intención: exigir rubro compatible (o palabras afines en keywords)
     if(wants.size){
-      let ok=false;for(const w of wants){if(rubro.includes(w)){ok=true;break;}}
+      let ok=false; for(const w of wants){ if(rubro.includes(w)) { ok=true; break; } }
       if(!ok) score=-1;
     }
 
-    if(score>=0){qt.forEach(t=>{if(blob.includes(t))score+=1;});}
+    if(score>=0){ qt.forEach(t=>{ if(blob.includes(t)) score+=1; }); }
 
     if(score>=0 && z && !locationMatch(l,z)) score=-1;
 
     const lat=parseLat(getField(l,'lat')),lng=parseLng(getField(l,'lng'));
-    let dist=null;
-    if(score>=0&&USER_POS&&!isNaN(lat)&&!isNaN(lng)){dist=haversineKm(USER_POS,{lat,lng});const bonus=Math.max(0,2-(dist/1.5));score+=bonus;}
+    let distKm=null;
+    if(score>=0&&USER_POS&&!isNaN(lat)&&!isNaN(lng)){
+      distKm=haversineKm(USER_POS,{lat,lng});
+      const bonus=Math.max(0,2-(distKm/1.5));
+      score+=bonus;
+    }
 
-    if(noIntent && USER_POS && dist!==null) score=1/(dist+1);
+    // sin intención ni zona → no mostrar todo
+    if(score===0 && noIntent) score=-1;
 
-    return {l:{...l,_distKm:dist,_plat:lat,_plng:lng},score};
+    return { l:{...l,_distKm:distKm,_plat:lat,_plng:lng}, score };
   }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(x=>x.l);
 }
 
-function render(items){
+function render(items, nearOnly){
   const box=document.getElementById('results');
-  if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
+  if(!items.length){
+    if(nearOnly && !USER_POS){
+      box.innerHTML='<div class="empty">Para “cercanos” necesitás activar 📍 Ubicación.</div>';
+    }else{
+      box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';
+    }
+    return;
+  }
   box.innerHTML=items.map(r=>{
     const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
     const hasCoords=!isNaN(r._plat)&&!isNaN(r._plng);
@@ -267,3 +280,7 @@ function render(items){
 </script>
 </body>
 </html>
+
+
+
+
