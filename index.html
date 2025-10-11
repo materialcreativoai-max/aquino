@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — estable (near 1.5 km)</title>
+<title>Aquí Nomás — estable (GPS + fallback)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,18 +30,20 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — estable</h1>
+  <h1>🏷️ Aquí Nomás — estable (GPS + fallback)</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'comiditas', 'Corrientes y 9 de Julio', 'cerca'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'cerca', 'Corrientes y 9 de Julio', 'comiditas'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">📍 Mostrando locales ≤ 1.5 km (≈15 cuadras).</div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">
+      📍 Mostrando locales ≤ <span id="nearKm">1.5</span> km (auto-expande a 2 y 3 km si hace falta).
+    </div>
   </div>
 
   <div id="results" class="box"></div>
@@ -49,38 +51,43 @@ h1{font-size:20px;margin:0 0 14px}
 
 <script>
 /* === TU CSV PUBLICADO (output=csv) === */
-const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
 /* ==================================== */
 
-/* utils */
-const STOP=new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle","cerca"]);
-const norm=s=>String(s||"").toLowerCase()
+/* utilidades base */
+const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle","cerca"]);
+const norm = s => String(s||"").toLowerCase()
   .normalize("NFD").replace(/\p{Diacritic}/gu,"")
-  .replace(/[.,;:]+/g," ")
-  .replace(/\s+/g," ").trim();
+  .replace(/[;,]+/g," ").replace(/\s+/g," ").trim();
 function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));}
 function parseCSV(txt){
   const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
-/* coordenadas robustas: acepta -34.603.715 / -58,382,320 / -34592650 */
+/* alias de calles (tolerante a variantes) */
+function aliasPlace(s){
+  let t=norm(s);
+  t=t.replace(/\bnueva?\b\s+de\s+julio/g,"9 de julio");
+  t=t.replace(/\bnueve\s+de\s+julio/g,"9 de julio");
+  t=t.replace(/\b9\s*julio\b/g,"9 de julio");
+  t=t.replace(/\bcorrs?entes\b/g,"corrientes");
+  t=t.replace(/\bcerritto\b/g,"cerrito");
+  t=t.replace(/\bsantafe\b/g,"santa fe");
+  return t;
+}
+/* coordenadas muy robustas */
 function parseCoord(v){
   if(v==null||v==="") return NaN;
   let s=String(v).trim();
+  const isNeg = /^\s*-/.test(s);
   s=s.replace(/,/g,'.');
-  const neg = s.trim().startsWith('-');
   const parts = s.split('.');
-  if(parts.length>2){
-    s = parts[0]+'.'+parts.slice(1).join(''); // deja solo el primer punto como decimal
-  }
+  if(parts.length>2){ s = parts[0]+'.'+parts.slice(1).join(''); }
   let n = Number(s);
   if(Number.isNaN(n)){
     const digits = s.replace(/[^0-9]/g,'');
-    if(digits.length>=7){
-      n = parseInt(digits,10)/1e6;
-      if(neg) n = -Math.abs(n);
-    }
+    if(digits.length>=7){ n = parseInt(digits,10)/1e6; if(isNeg) n = -Math.abs(n); }
   }
   if(Math.abs(n)>180) n/=1e6;
   return n;
@@ -92,24 +99,13 @@ function haversineKm(a,b){
   const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
-/* alias calles */
-function aliasPlace(s){
-  let t=norm(s);
-  t=t.replace(/\bnueva?\b\s+de\s+julio/g,"9 de julio");
-  t=t.replace(/\bnueve\s+de\s+julio/g,"9 de julio");
-  t=t.replace(/\b9\s*julio\b/g,"9 de julio");
-  t=t.replace(/\bcorrs?entes\b/g,"corrientes");
-  t=t.replace(/\bcerritto\b/g,"cerrito");
-  t=t.replace(/\bsantafe\b/g,"santa fe");
-  return t;
-}
 
-/* state */
+/* estado */
 let USER_POS=null, NEAR_ACTIVE=false;
-const NEAR_RADIUS_KM=1.5;
+let NEAR_RADIUS_KM=1.5; // radio objetivo (auto-expande a 2 y 3 si hay pocos resultados)
 let DATA=[], IDX=[], LOADED=false;
 
-/* load */
+/* carga CSV + índice */
 fetch(CSV_URL,{cache:"no-store"})
   .then(r=>r.text())
   .then(t=>{
@@ -126,7 +122,7 @@ fetch(CSV_URL,{cache:"no-store"})
   })
   .catch(()=>alert("No pude cargar la base (CSV)."));
 
-/* nlp */
+/* parser de frases */
 function understand(raw){
   const t0=(raw||"").trim();
   const t=aliasPlace(t0);
@@ -142,28 +138,19 @@ function understand(raw){
   }
   return { q:qText, z:zona, wantsNear };
 }
-function moveZoneIfLooksLikeName(q,z){
-  if(!z) return {q,z};
-  const zn=norm(z);
-  const looks=IDX.some(r=>r.nombre && (r.nombre===zn || r.nombre.includes(zn)));
-  if(looks){ return { q: q? (q+" "+z) : z, z:"" }; }
-  return {q,z};
-}
 
-/* ubicación */
+/* match de ubicación por zona / intersección */
 function locationMatch(idx,zona){
   if(!zona) return true;
   const f=IDX[idx].dirbar;
   const zn=aliasPlace(zona);
-
   if(zn.includes(" y ")){
     const [a,b]=zn.split(" y ").map(x=>norm(x)).filter(Boolean);
     if(!(a&&b)) return false;
-    return (f.includes(a) && f.includes(b));
+    return (f.includes(a) && f.includes(b)) || (f.includes(b) && f.includes(a));
   }
   const zWords=norm(zn).split(/\s+/).filter(Boolean);
-  const fWords=new Set(f.split(/\s+/));
-  if(zWords.some(w=>fWords.has(w))) return true;
+  if(zWords.some(w=>f.includes(w))) return true;
   for(let i=0;i<zWords.length-1;i++){
     const bi=zWords[i]+" "+zWords[i+1];
     if(f.includes(bi)) return true;
@@ -171,7 +158,7 @@ function locationMatch(idx,zona){
   return f.includes(norm(zn));
 }
 
-/* ui */
+/* UI */
 document.getElementById('goBtn').addEventListener('click',buscar);
 document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('qall').value="";
@@ -181,30 +168,49 @@ document.getElementById('clearBtn').addEventListener('click',()=>{
 });
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 document.getElementById('locBtn').addEventListener('click',()=>{
-  if(!navigator.geolocation){alert('Tu navegador no soporta geolocalización.');return;}
+  if(!navigator.geolocation){
+    // Fallback directo si el navegador no tiene geolocalización
+    USER_POS={lat:-34.6037,lng:-58.3816}; // Obelisco
+    NEAR_ACTIVE=true;
+    document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
+    document.getElementById('gpsHint').style.display='block';
+    buscar();
+    return;
+  }
   navigator.geolocation.getCurrentPosition(pos=>{
     USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    NEAR_ACTIVE=true; document.getElementById('gpsHint').style.display='block';
+    NEAR_ACTIVE=true;
+    document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
+    document.getElementById('gpsHint').style.display='block';
     buscar();
-  },()=>alert('No pude obtener tu ubicación. Permití acceso al GPS.'),{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+  },()=>{
+    // Fallback si el usuario niega permisos
+    USER_POS={lat:-34.6037,lng:-58.3816}; // Obelisco
+    NEAR_ACTIVE=true;
+    document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
+    document.getElementById('gpsHint').style.display='block';
+    buscar();
+  },{enableHighAccuracy:true,timeout:8000,maximumAge:0});
 });
 
-/* search */
+/* búsqueda */
 function buscar(){
   if(!LOADED){ alert("Cargando datos…"); return; }
 
   const raw=document.getElementById('qall').value;
-  let parsed=understand(raw);
-  if(parsed.wantsNear && USER_POS){ NEAR_ACTIVE=true; document.getElementById('gpsHint').style.display='block'; }
-  if(NEAR_ACTIVE) parsed.z="";
+  let {q,z,wantsNear}=understand(raw);
 
-  const moved=moveZoneIfLooksLikeName(parsed.q, parsed.z);
-  const q=moved.q, z=moved.z;
+  // activar NEAR por palabra o botón; si no hay GPS, usar fallback Obelisco
+  if(wantsNear || NEAR_ACTIVE){
+    if(!USER_POS){ USER_POS={lat:-34.6037,lng:-58.3816}; } // fallback silencioso
+    NEAR_ACTIVE=true; z=""; // NEAR ignora zona
+    document.getElementById('gpsHint').style.display='block';
+  }
 
   document.getElementById('chips').innerHTML=[
     z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
     q?`<div class="chip"><strong>Intención:</strong> ${q}</div>`:'',
-    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos (≤1.5 km)</div>`:''
+    (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:''
   ].join('');
 
   render(buscarInterno(q,z));
@@ -213,8 +219,27 @@ function buscar(){
 function buscarInterno(q,z){
   const qnorm=norm(q);
   const qt=toks(q);
-  const onlyLocation = (!qnorm && !!z) || (NEAR_ACTIVE && !qnorm);
 
+  // —— modo CERCA: filtra por radio (y auto-expande) ignorando zona
+  if(NEAR_ACTIVE && USER_POS){
+    const withDist = DATA.map((row,idx)=>{
+      const M=IDX[idx];
+      if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
+      const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
+      return {...row,_distKm:d};
+    }).filter(Boolean)
+      .sort((a,b)=>a._distKm-b._distKm);
+
+    let radius=NEAR_RADIUS_KM;
+    let inside = withDist.filter(r=>r._distKm<=radius);
+    if(inside.length<2){ radius=2.0; inside = withDist.filter(r=>r._distKm<=radius); }
+    if(inside.length<2){ radius=3.0; inside = withDist.filter(r=>r._distKm<=radius); }
+
+    document.getElementById('nearKm').textContent=radius.toFixed(1);
+    return inside.slice(0,20);
+  }
+
+  // —— búsqueda normal con intención + zona
   return DATA.map((row,idx)=>{
     const M=IDX[idx];
     let score=0;
@@ -231,25 +256,10 @@ function buscarInterno(q,z){
     if(z && !locationMatch(idx,z)) score=-1;
 
     let distKm=null;
-    if(score>=0 && USER_POS){
-      if(Number.isFinite(M.lat)&&Number.isFinite(M.lng)){
-        distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
-        if(NEAR_ACTIVE){
-          if(distKm<=NEAR_RADIUS_KM) score+=8; else score=-1;
-        }else{
-          score+=Math.max(0,2-(distKm/1.5));
-        }
-      }else if(NEAR_ACTIVE){
-        score=-1;
-      }
+    if(score>=0 && USER_POS && Number.isFinite(M.lat) && Number.isFinite(M.lng)){
+      distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
+      score+=Math.max(0,2-(distKm/1.5)); // bonus por cercanía
     }
-
-    if(score===0 && onlyLocation){
-      const passByZone = z ? locationMatch(idx,z) : false;
-      const passByNear = (NEAR_ACTIVE && distKm!==null && distKm<=NEAR_RADIUS_KM);
-      if(passByZone || passByNear) score=1;
-    }
-
     return { l:{...row,_distKm:distKm}, score };
   })
   .filter(x=>x.score>0)
