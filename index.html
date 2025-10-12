@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — estable (GPS + fallback)</title>
+<title>Aquí Nomás — demo sólida (robusta)</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%230b5cff'/%3E%3Ctext x='50' y='58' font-size='42' text-anchor='middle' fill='white' font-family='Arial'%3EAN%3C/text%3E%3C/svg%3E">
 <style>
 :root{--pri:#0b5cff;}
@@ -14,7 +14,7 @@ h1{font-size:20px;margin:0 0 14px}
 .row{display:flex;gap:8px;flex-wrap:wrap}
 .input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #cfd6e0;border-radius:12px;font-size:15px}
 .btn{padding:12px 14px;border-radius:12px;border:1px solid var(--pri);background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
-.btn.secondary{background:#fff;color:var(--pri)}
+.btn.secondary{background:#fff;color:#0b5cff}
 .btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
 .btn.mic{border:1px dashed var(--pri);background:#eef3ff}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
@@ -28,11 +28,12 @@ h1{font-size:20px;margin:0 0 14px}
 .meta{font-size:12px;color:#566}
 .empty{padding:12px;color:#666}
 .err{padding:12px;background:#fff3f3;border:1px solid #ffd2d2;color:#7a1a1a;border-radius:12px}
+.sugg{padding:10px 12px;background:#f2f6ff;border:1px solid #d7e3ff;border-radius:10px;margin-top:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — estable (GPS + fallback)</h1>
+  <h1>🏷️ Aquí Nomás — demo sólida</h1>
 
   <div class="box">
     <div class="row">
@@ -54,11 +55,7 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-/* ========= Fuente CSV =========
-   - Por defecto usa la URL base (tu Sheet publicado)
-   - Puede sobreescribirse con ?csv=... o #csv=...
-   - Se agrega cache-busting (?v=timestamp) para evitar caché vieja
-*/
+/* ====== CSV dinámico + cache-busting ====== */
 const DEFAULT_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
 function getParamCSV(){
   const q = new URLSearchParams(location.search);
@@ -72,20 +69,28 @@ const CSV_URL = (()=>{
   const sep = base.includes("?") ? "&" : "?";
   return base + sep + "v=" + Date.now();
 })();
-/* ============================= */
+/* ========================================== */
 
-/* utilidades base */
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle","cerca"]);
 const norm = s => String(s||"").toLowerCase()
   .normalize("NFD").replace(/\p{Diacritic}/gu,"")
   .replace(/[;,]+/g," ").replace(/\s+/g," ").trim();
-function toks(s){return norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));}
-function parseCSV(txt){
-  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
-  const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
-  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+
+/* stemming simple (plural/singular) */
+function stem(t){
+  let x = t;
+  x = x.replace(/(es|s)$/, "");
+  return x;
 }
-/* alias de calles (tolerante a variantes) */
+
+/* sinónimos mínimos por rubro/uso común */
+const SYN = {
+  "gastronomia":["comida","comidita","comiditas","almuerzo","almorzar","resto","restaurante","bar","cafeteria","bebida","vianda"],
+  "libreria":["libreria","libro","libros","papeleria","resma","a4","cuaderno","lapiz","lapices","pluma","fibron","resmas"],
+  "ferreteria":["ferreteria","ferretria","tornillo","tornillos","clavo","clavos","herramienta","herramientas","chapa","chapas","bulon","bulones"]
+};
+
+/* alias de calles y correcciones comunes */
 function aliasPlace(s){
   let t=norm(s);
   t=t.replace(/\bnueva?\b\s+de\s+julio/g,"9 de julio");
@@ -93,10 +98,35 @@ function aliasPlace(s){
   t=t.replace(/\b9\s*julio\b/g,"9 de julio");
   t=t.replace(/\bcorrs?entes\b/g,"corrientes");
   t=t.replace(/\bcerritto\b/g,"cerrito");
-  t=t.replace(/\bsantafe\b/g,"santa fe");
+  t=t.replace(/\bsanta\s*fe\b/g,"santa fe");
+  t=t.replace(/\bel\s*centro\b/g,"microcentro");
   return t;
 }
-/* coordenadas muy robustas */
+
+function toks(s){
+  const base = norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));
+  // expandir con stems y sinónimos
+  const out = new Set();
+  base.forEach(t=>{
+    out.add(t);
+    out.add(stem(t));
+    // mapear sinónimos por palabra
+    Object.entries(SYN).forEach(([k,arr])=>{
+      if(arr.includes(t) || arr.includes(stem(t))){
+        out.add(k);
+      }
+    });
+  });
+  return Array.from(out).filter(Boolean);
+}
+
+function parseCSV(txt){
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
+
+/* coordenadas robustas */
 function parseCoord(v){
   if(v==null||v==="") return NaN;
   let s=String(v).trim();
@@ -112,6 +142,7 @@ function parseCoord(v){
   if(Math.abs(n)>180) n/=1e6;
   return n;
 }
+
 function haversineKm(a,b){
   const R=6371,toRad=x=>x*Math.PI/180;
   const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
@@ -122,32 +153,39 @@ function haversineKm(a,b){
 
 /* estado */
 let USER_POS=null, NEAR_ACTIVE=false;
-let NEAR_RADIUS_KM=1.5; // auto-expande a 2 y 3 si hay pocos resultados
+let NEAR_RADIUS_KM=1.5;
 let DATA=[], IDX=[], LOADED=false;
 
-/* carga CSV + índice */
+/* carga */
 fetch(CSV_URL,{cache:"no-store"})
-  .then(r=>{
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    return r.text();
-  })
+  .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.text(); })
   .then(t=>{
     DATA=parseCSV(t);
+    // normalización completa al indexar
     IDX=DATA.map(row=>{
+      // tolerar promo_texto con espacios o variantes
+      const promo = row.promo_texto || row["promo_texto "] || row["promo_texto_"] || "";
       const nombre=norm(row.nombre_local||row.nombre||row.local||"");
       const rubro=norm(row.rubro||"");
       const kw=norm(row.keywords||"");
       const dirbar=aliasPlace((row.direccion||"")+" "+(row.barrio||"")).replace(/,+/g," ").replace(/\s+/g," ").trim();
       const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
-      return {nombre,rubro,kw,dirbar,lat,lng};
+      // expandir keywords con sinónimos por rubro
+      let kwExp = kw;
+      Object.entries(SYN).forEach(([k,arr])=>{
+        if(rubro.includes(k) || arr.some(a=>kw.includes(a))){
+          kwExp += " " + k + " " + arr.join(" ");
+        }
+      });
+      return {nombre,rubro,kw:norm(kwExp),dirbar,lat,lng,promo_raw:promo};
     });
     LOADED=true;
     showSrcHint();
   })
-  .catch((e)=>{
+  .catch(e=>{
     const err=document.getElementById('error');
     err.style.display='block';
-    err.innerHTML = "No pude cargar la base (CSV). Verificá: <ul style='margin:6px 0 0 18px'><li>Que el enlace sea de Google Sheets con ‘Publicar en la web’ en formato CSV.</li><li>Que estés usando la hoja correcta (gid).</li><li>Probá abrir el CSV en otra pestaña; si carga, pegá ese URL con ?csv=... en esta página.</li></ul><div style='margin-top:6px;font-size:12px;color:#666'>Detalle: "+(e.message||e)+"</div>";
+    err.innerHTML = "No pude cargar la base (CSV). Verificá publicación como CSV en Google Sheets. <div style='margin-top:6px;font-size:12px;color:#666'>Detalle: "+(e.message||e)+"</div>";
   });
 
 function showSrcHint(){
@@ -164,26 +202,35 @@ function understand(raw){
   const t=aliasPlace(t0);
   let zona="", qText=t0, wantsNear=/\bcerca\b/.test(t);
 
-  let m=t.match(/(?:estoy|vivo|me\s+encuentro)?\s*(?:en|por|sobre)\s+([a-z0-9\s]+)$/i);
-  if(m){ zona=(m[1]||"").trim(); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
-  else{
-    const words=t.split(/\s+/).filter(Boolean);
-    if(words.length>0&&(words.length<=4||t.includes(" y "))){
-      zona=t0.trim(); qText="";
+  const intRegex = /(.*?)(?:\s+)?((?:[a-z0-9\s]+)\s*(?:y|&|\/)\s*(?:[a-z0-9\s]+))$/i;
+  let m=t.match(intRegex);
+  if(m){ zona=(m[2]||"").trim(); qText=(m[1]||"").trim(); }
+
+  if(!zona){
+    m=t.match(/(?:estoy|vivo|me\s+encuentro)?\s*(?:en|por|sobre)\s+([a-z0-9\s]+)$/i);
+    if(m){ zona=(m[1]||"").trim(); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
+    else{
+      const words=t.split(/\s+/).filter(Boolean);
+      if(words.length>0&&(words.length<=4||t.includes(" y "))){
+        zona=t0.trim(); qText="";
+      }
     }
   }
   return { q:qText, z:zona, wantsNear };
 }
 
-/* match de ubicación por zona / intersección */
+/* intersección / zona match */
 function locationMatch(idx,zona){
   if(!zona) return true;
   const f=IDX[idx].dirbar;
   const zn=aliasPlace(zona);
-  if(zn.includes(" y ")){
-    const [a,b]=zn.split(" y ").map(x=>norm(x)).filter(Boolean);
-    if(!(a&&b)) return false;
-    return (f.includes(a) && f.includes(b)) || (f.includes(b) && f.includes(a));
+  // intersección "a y b" en cualquier orden
+  if(/\b(y|&|\/)\b/.test(zn)){
+    const parts=zn.split(/\b(?:y|&|\/)\b/).map(x=>norm(x).trim()).filter(Boolean);
+    if(parts.length===2){
+      const [a,b]=parts;
+      return (f.includes(a) && f.includes(b));
+    }
   }
   const zWords=norm(zn).split(/\s+/).filter(Boolean);
   if(zWords.some(w=>f.includes(w))) return true;
@@ -206,7 +253,7 @@ document.getElementById('clearBtn').addEventListener('click',()=>{
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 document.getElementById('locBtn').addEventListener('click',()=>{
   if(!navigator.geolocation){
-    USER_POS={lat:-34.6037,lng:-58.3816}; // Obelisco (fallback)
+    USER_POS={lat:-34.6037,lng:-58.3816};
     NEAR_ACTIVE=true;
     document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
     document.getElementById('gpsHint').style.display='block';
@@ -220,7 +267,7 @@ document.getElementById('locBtn').addEventListener('click',()=>{
     document.getElementById('gpsHint').style.display='block';
     buscar();
   },()=>{
-    USER_POS={lat:-34.6037,lng:-58.3816}; // Fallback si niega permisos
+    USER_POS={lat:-34.6037,lng:-58.3816};
     NEAR_ACTIVE=true;
     document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
     document.getElementById('gpsHint').style.display='block';
@@ -235,9 +282,8 @@ function buscar(){
   const raw=document.getElementById('qall').value;
   let {q,z,wantsNear}=understand(raw);
 
-  // modo CERCA: filtra por radio ignorando zona; si faltan lat/lng, esos ítems quedan para búsqueda normal
   if(wantsNear || NEAR_ACTIVE){
-    if(!USER_POS){ USER_POS={lat:-34.6037,lng:-58.3816}; } // fallback silencioso
+    if(!USER_POS){ USER_POS={lat:-34.6037,lng:-58.3816}; }
     NEAR_ACTIVE=true; z="";
     document.getElementById('gpsHint').style.display='block';
   }
@@ -248,7 +294,8 @@ function buscar(){
     (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:''
   ].join('');
 
-  render(buscarInterno(q,z));
+  const items = buscarInterno(q,z);
+  render(items, q, z);
 }
 
 function buscarInterno(q,z){
@@ -258,9 +305,9 @@ function buscarInterno(q,z){
   if(NEAR_ACTIVE && USER_POS){
     const withDist = DATA.map((row,idx)=>{
       const M=IDX[idx];
-      if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null; // sin coords no entran en "cerca"
+      if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
       const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
-      return {...row,_distKm:d};
+      return {...row,_distKm:d,_idx:idx};
     }).filter(Boolean)
       .sort((a,b)=>a._distKm-b._distKm);
 
@@ -273,18 +320,17 @@ function buscarInterno(q,z){
     return inside.slice(0,20);
   }
 
-  // búsqueda normal (texto + zona). Ítems sin lat/lng se listan igual, sólo sin "≈ cuadras"
   return DATA.map((row,idx)=>{
     const M=IDX[idx];
     let score=0;
 
-    if(qnorm && M.nombre===qnorm) score+=10;
-    if(qnorm && M.nombre.includes(qnorm)) score+=6;
+    if(qnorm && M.nombre===qnorm) score+=12;
+    if(qnorm && M.nombre.includes(qnorm)) score+=8;
 
     qt.forEach(t=>{
-      if(M.nombre.includes(t)) score+=3;
-      if(M.kw.includes(t))     score+=2;
-      if(M.rubro.includes(t))  score+=1;
+      if(M.nombre.includes(t)) score+=4;
+      if(M.kw.includes(t))     score+=3;
+      if(M.rubro.includes(t))  score+=2;
     });
 
     if(z && !locationMatch(idx,z)) score=-1;
@@ -294,7 +340,7 @@ function buscarInterno(q,z){
       distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
       score+=Math.max(0,2-(distKm/1.5));
     }
-    return { l:{...row,_distKm:distKm}, score };
+    return { l:{...row,_distKm:distKm,_idx:idx}, score };
   })
   .filter(x=>x.score>0)
   .sort((a,b)=>b.score-a.score)
@@ -302,20 +348,24 @@ function buscarInterno(q,z){
   .map(x=>x.l);
 }
 
-/* render */
-function render(items){
+function render(items, q, z){
   const box=document.getElementById('results');
-  if(!items.length){box.innerHTML='<div class="empty">No encontré opciones. Probá con otra palabra o zona.</div>';return;}
+  if(!items.length){
+    box.innerHTML='<div class="empty">No encontré opciones.</div>' + suggest(q,z);
+    return;
+  }
   box.innerHTML=items.map(r=>{
     const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
     const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
     const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null;
     const dist=(typeof r._distKm==='number')?`<div class="meta">≈ ${(r._distKm*10).toFixed(0)} cuadras</div>`:'';
+    // promo tolerante
+    const promo=IDX[r._idx]?IDX[r._idx].promo_raw:"";
     return `<div class="card">
       <div class="title">${name} — <span>${r.rubro||''}</span></div>
       <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
       ${r.horario?`<div class="promo">Horario: ${r.horario}</div>`:''}
-      ${r.promo_texto?`<div class="promo">${r.promo_texto}</div>`:''}
+      ${promo?`<div class="promo">${promo}</div>`:''}
       ${dist}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
         ${wa?`<a class="btn" target="_blank" href="${wa}">WhatsApp</a>`:''}
@@ -323,6 +373,16 @@ function render(items){
       </div>
     </div>`;
   }).join("");
+}
+
+function suggest(q,z){
+  const hints = [];
+  const t = norm(q||"");
+  if(t.includes("comid")) hints.push("Proba: gastronomía, almorzar, bar");
+  if(t.includes("libro")||t.includes("librer")) hints.push("Probá: librería, papelería");
+  if(t.includes("ferret")||t.includes("clavo")||t.includes("tornillo")) hints.push("Probá: ferretería");
+  if(z && /\b(y|&|\/)\b/.test(z)) hints.push("Escribí la intersección así: 'Corrientes y 9 de Julio'");
+  return hints.length?`<div class="sugg"><strong>Sugerencias:</strong> ${hints.join(" · ")}</div>`:"";
 }
 
 /* mic */
