@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="es">
 <head>
@@ -56,11 +57,7 @@ h1{font-size:20px;margin:0 0 14px}
 
 <script>
 /* ====== CSV dinámico + cache-busting ====== */
-/*const DEFAULT_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-/* linea larga guardarla. 
-/* https://materialcreativoai-max.github.io/aquino/?csv=https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv
-
+const DEFAULT_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 function getParamCSV(){
   const q = new URLSearchParams(location.search);
   const urlQ = q.get("csv");
@@ -385,7 +382,7 @@ function suggest(q,z){
   if(t.includes("comid")) hints.push("Proba: gastronomía, almorzar, bar");
   if(t.includes("libro")||t.includes("librer")) hints.push("Probá: librería, papelería");
   if(t.includes("ferret")||t.includes("clavo")||t.includes("tornillo")) hints.push("Probá: ferretería");
-  if(z && /\b(y|&|\/)\b/.test(z)) hints.push("Escribí la intersección así: 'Corrientes y 9 de Julio'");
+  if(z && /(y|&|\/)/.test(z)) hints.push("Escribí la intersección así: 'Corrientes y 9 de Julio'");
   return hints.length?`<div class="sugg"><strong>Sugerencias:</strong> ${hints.join(" · ")}</div>`:"";
 }
 
