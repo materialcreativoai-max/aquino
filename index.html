@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — demo estable</title>
+<title>Aquí Nomás — estable</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%230b5cff'/%3E%3Ctext x='50' y='58' font-size='42' text-anchor='middle' fill='white' font-family='Arial'%3EAN%3C/text%3E%3C/svg%3E">
 <style>
 :root{--pri:#0b5cff;}
@@ -33,7 +33,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo estable</h1>
+  <h1>🏷️ Aquí Nomás — estable</h1>
 
   <div class="box">
     <div class="row">
@@ -55,7 +55,7 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-// ====== Fuente CSV (defecto + ?csv=) ======
+// ====== CSV (defecto + ?csv=) ======
 const DEFAULT_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 function getParamCSV() {
   const q = new URLSearchParams(location.search);
@@ -69,14 +69,12 @@ const CSV_URL = (()=>{
   const sep = base.includes("?") ? "&" : "?";
   return base + sep + "v=" + Date.now();
 })();
-// ==========================================
+// ===================================
 
-// utilidades base
+// utilidades base sin \p{...}
+function removeDiacritics(str) { return str.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle","cerca"]);
-const norm = s => String(s||"").toLowerCase()
-  .normalize("NFD").replace(/\p{Diacritic}/gu,"")
-  .replace(/[;,]+/g," ").replace(/\s+/g," ").trim();
-
+const norm = s => removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
 function stem(t){ return t.replace(/(es|s)$/,""); }
 
 const SYN = {
@@ -98,7 +96,7 @@ function aliasPlace(s){
 }
 
 function toks(s){
-  const base = norm(s).replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(t=>t&&!STOP.has(t));
+  const base = norm(s).split(/\s+/).filter(t=>t&&!STOP.has(t));
   const out = new Set();
   base.forEach(t=>{
     out.add(t); out.add(stem(t));
@@ -146,14 +144,15 @@ fetch(CSV_URL,{cache:"no-store"})
     DATA=parseCSV(t);
     IDX=DATA.map(row=>{
       const promo = row.promo_texto || row["promo_texto "] || row["promo_texto_"] || "";
-      const nombre=norm(row.nombre_local||row.nombre||row.local||"");
+      const nombreRaw = row.nombre_local||row.nombre||row.local||"";
+      const nombre=norm(nombreRaw);
       const rubro=norm(row.rubro||"");
-      const kw=norm(row.keywords||"");
+      let kw=norm(row.keywords||"");
+      let kwExp = kw + " " + nombre;
+      Object.entries(SYN).forEach(([k,arr])=>{ if(rubro.includes(k) || arr.some(a=>kw.includes(a))) kwExp += " " + k + " " + arr.join(" "); });
       const dirbar=aliasPlace((row.direccion||"")+" "+(row.barrio||"")).replace(/,+/g," ").replace(/\s+/g," ").trim();
       const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
-      let kwExp = kw;
-      Object.entries(SYN).forEach(([k,arr])=>{ if(rubro.includes(k) || arr.some(a=>kw.includes(a))) kwExp += " " + k + " " + arr.join(" "); });
-      return {nombre,rubro,kw:norm(kwExp),dirbar,lat,lng,promo_raw:promo};
+      return {nombre,rubro,kw:norm(kwExp),dirbar,lat,lng,promo_raw:promo,_nombreRaw:nombreRaw};
     });
     LOADED=true; showSrcHint();
   })
@@ -169,13 +168,14 @@ function understand(raw){
   const t=aliasPlace(t0);
   let zona="", qText=t0, wantsNear=/\bcerca\b/.test(t);
 
-  const intRegex = /(.*?)(?:\s+)?((?:[a-z0-9\s]+)\s*(?:y|&|\/)\s*(?:[a-z0-9\s]+))$/i;
-  let m=t.match(intRegex); if(m){ zona=(m[2]||"").trim(); qText=(m[1]||"").trim(); }
+  const intRegex = /(.*?)[\s]*([a-z0-9\s]+\s*(?:y|&|\/)\s*[a-z0-9\s]+)$/i;
+  let m=t.match(intRegex);
+  if(m && m[2]){ zona=(m[2]||"").trim(); qText=(m[1]||"").trim(); }
 
   if(!zona){
     m=t.match(/(?:estoy|vivo|me\s+encuentro)?\s*(?:en|por|sobre)\s+([a-z0-9\s]+)$/i);
     if(m){ zona=(m[1]||"").trim(); qText=t0.replace(new RegExp(m[0],'i'),'').trim(); }
-    else{ const words=t.split(/\s+/).filter(Boolean); if(words.length>0&&(words.length<=4||t.includes(" y "))){ zona=t0.trim(); qText=""; } }
+    else{ const words=t.split(/\s+/).filter(Boolean); if(words.length>0&&(words.length<=4||t.includes(" y "))) { zona=t0.trim(); qText=""; } }
   }
   return { q:qText, z:zona, wantsNear };
 }
@@ -184,10 +184,7 @@ function locationMatch(idx,zona){
   if(!zona) return true;
   const f=IDX[idx].dirbar;
   const zn=aliasPlace(zona);
-  if(/\b(y|&|\/)\b/.test(zn)){
-    const parts=zn.split(/\b(?:y|&|\/)\b/).map(x=>norm(x).trim()).filter(Boolean);
-    if(parts.length===2){ const [a,b]=parts; return (f.includes(a) && f.includes(b)); }
-  }
+  if(/\b(y|&|\/)\b/.test(zn)){ const parts=zn.split(/\b(?:y|&|\/)\b/).map(x=>norm(x).trim()).filter(Boolean); if(parts.length===2){ const [a,b]=parts; return (f.includes(a) && f.includes(b)); } }
   const zWords=norm(zn).split(/\s+/).filter(Boolean);
   if(zWords.some(w=>f.includes(w))) return true;
   for(let i=0;i<zWords.length-1;i++){ const bi=zWords[i]+" "+zWords[i+1]; if(f.includes(bi)) return true; }
@@ -223,9 +220,18 @@ function buscar(){
   render(items,q,z);
 }
 
+function scoreRow(M, qt, qnorm) {
+  let score=0;
+  if(qnorm && M.nombre===qnorm) score+=12;
+  if(qnorm && M.nombre.includes(qnorm)) score+=8;
+  qt.forEach(t=>{ if(M.nombre.includes(t)) score+=4; if(M.kw.includes(t)) score+=3; if(M.rubro.includes(t)) score+=2; });
+  return score;
+}
+
 function buscarInterno(q,z){
   const qnorm=norm(q);
   const qt=toks(q);
+
   if(NEAR_ACTIVE && USER_POS){
     const withDist = DATA.map((row,idx)=>{ const M=IDX[idx]; if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null; const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng}); return {...row,_distKm:d,_idx:idx}; }).filter(Boolean).sort((a,b)=>a._distKm-b._distKm);
     let radius=NEAR_RADIUS_KM; let inside = withDist.filter(r=>r._distKm<=radius);
@@ -234,14 +240,15 @@ function buscarInterno(q,z){
     document.getElementById('nearKm').textContent=radius.toFixed(1);
     return inside.slice(0,20);
   }
-  return DATA.map((row,idx)=>{ const M=IDX[idx]; let score=0;
-    if(qnorm && M.nombre===qnorm) score+=12;
-    if(qnorm && M.nombre.includes(qnorm)) score+=8;
-    qt.forEach(t=>{ if(M.nombre.includes(t)) score+=4; if(M.kw.includes(t)) score+=3; if(M.rubro.includes(t)) score+=2; });
-    if(z && !locationMatch(idx,z)) score=-1;
-    let distKm=null; if(score>=0 && USER_POS && Number.isFinite(M.lat) && Number.isFinite(M.lng)){ distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng}); score+=Math.max(0,2-(distKm/1.5)); }
-    return { l:{...row,_distKm:distKm,_idx:idx}, score };
-  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,30).map(x=>x.l);
+
+  let arr = DATA.map((row,idx)=>{ const M=IDX[idx]; let score=scoreRow(M, qt, qnorm); if(z && !locationMatch(idx,z)) score=-1; let distKm=null; if(score>=0 && USER_POS && Number.isFinite(M.lat) && Number.isFinite(M.lng)){ distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng}); score+=Math.max(0,2-(distKm/1.5)); } return { l:{...row,_distKm:distKm,_idx:idx}, score, M }; }).filter(x=>x.score>0);
+
+  if(arr.length===0 && qnorm){
+    const qtok = qnorm.split(/\s+/).filter(Boolean);
+    arr = DATA.map((row,idx)=>{ const M=IDX[idx]; const hay = qtok.some(t=> M.nombre.includes(t) || M.rubro.includes(t) || M.kw.includes(t)); if(!hay) return null; return { l:{...row,_distKm:null,_idx:idx}, score:1, M }; }).filter(Boolean);
+  }
+
+  return arr.sort((a,b)=>b.score-a.score).slice(0,30).map(x=>x.l);
 }
 
 function render(items,q,z){
