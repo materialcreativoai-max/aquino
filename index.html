@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — diagnóstico</title>
+<title>Aquí Nomás — resiliente</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
-.wrap{max-width:1100px;margin:0 auto;padding:18px;display:grid;grid-template-columns:1fr 360px;gap:16px}
+.wrap{max-width:860px;margin:0 auto;padding:18px}
 h1{font-size:20px;margin:0 0 14px}
 .box{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:14px;margin:0 0 14px}
 .row{display:flex;gap:8px;flex-wrap:wrap}
@@ -27,84 +27,93 @@ h1{font-size:20px;margin:0 0 14px}
 .meta{font-size:12px;color:#566}
 .empty{padding:12px;color:#666}
 .err{padding:12px;background:#fff3f3;border:1px solid #ffd2d2;color:#7a1a1a;border-radius:12px}
-#debugPanel{position:sticky;top:18px;height:calc(100vh - 36px);overflow:auto;background:#0b1220;color:#e8eef9;border-radius:14px;padding:12px;box-shadow:inset 0 0 0 1px #263249}
-#debugPanel h2{margin:6px 0 10px;font-size:16px}
-pre{white-space:pre-wrap;word-wrap:break-word;background:#0f1625;border:1px solid #263249;border-radius:10px;padding:8px;color:#cfe3ff;font-size:12px}
-.kv{font-size:12px;line-height:1.4}
-.kv b{color:#9ec1ff}
-.badge{display:inline-block;padding:2px 6px;border-radius:6px;font-size:11px;border:1px solid #415a9a;background:#16213b;color:#cfe3ff;margin-right:4px}
-.ok{color:#6be38e} .warn{color:#ffd66b} .err2{color:#ff8b8b}
+.sugg{padding:10px 12px;background:#f2f6ff;border:1px solid #d7e3ff;border-radius:10px;margin-top:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div>
-    <h1>🏷️ Aquí Nomás — diagnóstico</h1>
-    <div class="box">
-      <div class="row">
-        <input id="qall" class="input" autofocus placeholder="Ej: 'cerca', 'Corrientes y 9 de Julio', 'comiditas'"/>
-        <button id="goBtn" class="btn">Buscar</button>
-        <button id="clearBtn" class="btn ghost">Limpiar</button>
-        <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
-      </div>
-      <div class="chips" id="chips"></div>
-      <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">
-        📍 Mostrando locales ≤ <span id="nearKm">1.5</span> km (auto-expande a 2 y 3 km si hace falta).
-      </div>
-      <div class="tiny" id="srcHint" style="margin-top:6px;display:none"></div>
+  <h1>🏷️ Aquí Nomás — resiliente</h1>
+
+  <div class="box">
+    <div class="row">
+      <input id="qall" class="input" autofocus placeholder="Ej: 'cerca', 'Corrientes y 9 de Julio', 'comiditas'"/>
+      <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
+      <button id="goBtn" class="btn">Buscar</button>
+      <button id="clearBtn" class="btn ghost">Limpiar</button>
+      <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
-    <div id="error" style="display:none" class="box err"></div>
-    <div id="results" class="box"></div>
+    <div class="chips" id="chips"></div>
+    <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">
+      📍 Mostrando locales ≤ <span id="nearKm">1.5</span> km (auto-expande a 2 y 3 km si hace falta).
+    </div>
+    <div class="tiny" id="srcHint" style="margin-top:6px;display:none"></div>
   </div>
 
-  <div id="debugPanel" class="box">
-    <h2>🔧 Debug</h2>
-    <div class="kv">
-      <div><b>CSV_URL:</b> <span id="dbgCsv"></span></div>
-      <div><b>debug:</b> <span id="dbgDebug"></span> · <b>demo:</b> <span id="dbgDemo"></span></div>
-      <div><b>Filas CSV:</b> <span id="dbgRows">-</span></div>
-      <div><b>Columnas detectadas:</b> <span id="dbgCols">-</span></div>
-      <div><span class="badge">q</span><span id="dbgQ"></span></div>
-      <div><span class="badge">z</span><span id="dbgZ"></span></div>
-      <div><span class="badge">tokens</span><span id="dbgTok"></span></div>
-      <div><span class="badge">modo</span><span id="dbgMode"></span></div>
-      <div><span class="badge">resultado</span><span id="dbgRes"></span></div>
-    </div>
-    <h2>Primer registro</h2>
-    <pre id="dbgFirst">-</pre>
-    <h2>Motivos de descarte</h2>
-    <pre id="dbgWhy">-</pre>
-  </div>
+  <div id="error" style="display:none" class="box err"></div>
+  <div id="results" class="box"></div>
 </div>
 
 <script>
-// ====== params ======
-function getParams(){
-  const q = new URLSearchParams(location.search);
-  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
-  return {
-    csv: (q.get("csv") || hash.get("csv") || "").trim(),
-    debug: q.get("debug")==='1' || hash.get("debug")==='1',
-    demo: q.get("demo")==='1' || hash.get("demo")==='1'
-  };
-}
-const P = getParams();
-
-// ====== CSV (defecto + ?csv= o demo) ======
+// ====== CSV dinámico con normalización ======
 const DEFAULT_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-function effectiveCSV(){
-  if(P.demo) return "__DEMO__";
-  return (P.csv || DEFAULT_CSV);
-}
-const CSV_URL = (()=>{
-  const base = effectiveCSV();
-  if(base==="__DEMO__") return base;
-  const sep = base.includes("?") ? "&" : "?";
-  return base + sep + "v=" + Date.now();
-})();
-// =====================
 
-// utils sin \p{...}
+
+function getParamCSV() {
+  const q = new URLSearchParams(location.search);
+  const urlQ = q.get("csv");
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const urlH = hash.get("csv");
+  return (urlQ || urlH || DEFAULT_CSV).trim();
+}
+function normalizeGoogleCSV(u){
+  try{
+    const url = new URL(u);
+    if(url.hostname.includes("docs.google.com") && url.pathname.includes("/spreadsheets/") && url.pathname.includes("/pub")){
+      if(!url.search.includes("output=csv")){
+        if(!url.searchParams.has("single")) url.searchParams.set("single","true");
+        url.searchParams.set("output","csv");
+      }
+      return url.toString();
+    }
+  }catch(e){}
+  return u;
+}
+async function fetchCSVWithFallback(base){
+  const u1 = normalizeGoogleCSV(base);
+  const sep = u1.includes("?") ? "&" : "?";
+  const url1 = u1 + sep + "v=" + Date.now();
+  let r = await fetch(url1,{cache:"no-store"});
+  let t = await r.text();
+  const ct = r.headers.get("content-type")||"";
+  const looksHTML = ct.includes("text/html") || /^\s*<!doctype\s+html/i.test(t);
+  if(!looksHTML) return t;
+  // Fallback 1: forzar output=csv
+  if(!/output=csv/.test(u1)){
+    const u2 = u1 + (u1.includes("?")?"&":"?") + "single=true&output=csv&v=" + Date.now();
+    const r2 = await fetch(u2,{cache:"no-store"});
+    const t2 = await r2.text();
+    const ct2 = r2.headers.get("content-type")||"";
+    if(!(ct2.includes("text/html") || /^\s*<!doctype\s+html/i.test(t2))) return t2;
+  }
+  // Fallback 2: modo gviz
+  try{
+    const url = new URL(u1);
+    url.pathname = url.pathname.replace(/\/pub$/, "/gviz/tq");
+    url.searchParams.set("tqx","out:csv");
+    url.searchParams.set("v", Date.now());
+    const r3 = await fetch(url.toString(), {cache:"no-store"});
+    const t3 = await r3.text();
+    const ct3 = r3.headers.get("content-type")||"";
+    if(!(ct3.includes("text/html") || /^\s*<!doctype\s+html/i.test(t3))) return t3;
+  }catch(e){}
+  throw new Error("Google devolvió HTML en vez de CSV. Revisá que el enlace esté 'Publicado' como CSV.");
+}
+const CSV_URL = getParamCSV();
+document.getElementById('srcHint').style.display='block';
+document.getElementById('srcHint').textContent = "Fuente CSV: " + CSV_URL;
+// ===========================================
+
+// utilidades base
 function removeDiacritics(str) { return str.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle","cerca"]);
 const norm = s => removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
@@ -141,7 +150,7 @@ function toks(s){
 function parseCSV(txt){
   const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
   const head=rows.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));
-  return {head, rows: rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()]))) };
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
 
 function parseCoord(v){
@@ -168,60 +177,32 @@ function haversineKm(a,b){
 // estado
 let USER_POS=null, NEAR_ACTIVE=false;
 let NEAR_RADIUS_KM=1.5;
-let DATA=[], IDX=[], LOADED=false, WHY=[];
+let DATA=[], IDX=[], LOADED=false;
 
-// demo inline (para aislar CSV)
-const DEMO = `nombre_local,rubro,keywords,direccion,barrio,lat,lng,horario,promo_texto
-Comiditas,gastronomia,almuerzo,Av. Corrientes y 9 de Julio,Microcentro,-34.6037,-58.3816,,Menú del día
-Libreria Centro,libreria,libros cuadernos,Av. Santa Fe 900,Recoleta,-34.595,-58.39,,20% en útiles
-Ferre Todo,ferreteria,tornillos clavos,Bolivar 500,San Telmo,-34.617,-58.369,,Atendemos domingo`;
-
-// init
-document.getElementById('dbgCsv').textContent = (CSV_URL==="__DEMO__"? "(demo interno)" : CSV_URL);
-document.getElementById('dbgDebug').textContent = P.debug? "on":"off";
-document.getElementById('dbgDemo').textContent = P.demo? "on":"off";
-
-function logWhy(msg){ WHY.push(msg); }
-
-function loadData(){
-  if(CSV_URL==="__DEMO__"){
-    const parsed = parseCSV(DEMO);
-    hydrate(parsed);
-    return;
-  }
-  fetch(CSV_URL,{cache:"no-store"})
-    .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.text(); })
-    .then(t=>{ hydrate(parseCSV(t)); })
-    .catch(e=>{ const err=document.getElementById('error'); err.style.display='block'; err.innerHTML="No pude cargar la base (CSV).<div style='margin-top:6px;font-size:12px;color:#666'>Detalle: "+(e.message||e)+"</div>"; });
-}
-
-function hydrate(parsed){
-  const {head, rows} = parsed;
-  document.getElementById('dbgCols').textContent = head.join(", ");
-  document.getElementById('dbgRows').textContent = rows.length;
-  DATA = rows;
-  IDX = DATA.map(row=>{
-    const promo = row.promo_texto || row["promo_texto "] || row["promo_texto_"] || "";
-    const nombreRaw = row.nombre_local||row.nombre||row.local||"";
-    const nombre=norm(nombreRaw);
-    const rubro=norm(row.rubro||"");
-    let kw=norm(row.keywords||"");
-    let kwExp = kw + " " + nombre;
-    Object.entries(SYN).forEach(([k,arr])=>{ if(rubro.includes(k) || arr.some(a=>kw.includes(a))) kwExp += " " + k + " " + arr.join(" "); });
-    const dirbar=aliasPlace((row.direccion||"")+" "+(row.barrio||"")).replace(/,+/g," ").replace(/\s+/g," ").trim();
-    const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
-    return {nombre,rubro,kw:norm(kwExp),dirbar,lat,lng,promo_raw:promo,_row:row};
+// carga CSV con fallback automático
+fetchCSVWithFallback(CSV_URL)
+  .then(t=>{
+    DATA=parseCSV(t);
+    IDX=DATA.map(row=>{
+      const promo = row.promo_texto || row["promo_texto "] || row["promo_texto_"] || "";
+      const nombreRaw = row.nombre_local||row.nombre||row.local||"";
+      const nombre=norm(nombreRaw);
+      const rubro=norm(row.rubro||"");
+      let kw=norm(row.keywords||"");
+      let kwExp = kw + " " + nombre;
+      Object.entries(SYN).forEach(([k,arr])=>{ if(rubro.includes(k) || arr.some(a=>kw.includes(a))) kwExp += " " + k + " " + arr.join(" "); });
+      const dirbar=aliasPlace((row.direccion||"")+" "+(row.barrio||"")).replace(/,+/g," ").replace(/\s+/g," ").trim();
+      const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
+      return {nombre,rubro,kw:norm(kwExp),dirbar,lat,lng,promo_raw:promo,_nombreRaw:nombreRaw};
+    });
+    LOADED=true;
+  })
+  .catch(e=>{
+    const err=document.getElementById('error');
+    err.style.display='block';
+    err.innerHTML="No pude cargar la base. " +
+      "Probá publicar como CSV o pasá la URL con &single=true&output=csv.<div style='margin-top:6px;font-size:12px;color:#666'>Detalle: "+(e.message||e)+"</div>";
   });
-  LOADED=true;
-  document.getElementById('dbgFirst').textContent = rows[0]? JSON.stringify(rows[0],null,2): "-";
-  showSrcHint();
-}
-
-function showSrcHint(){
-  const el=document.getElementById('srcHint');
-  el.style.display='block';
-  el.textContent = "Fuente: " + (CSV_URL==="__DEMO__" ? "(demo interno)" : (new URL(CSV_URL)).origin + (new URL(CSV_URL)).pathname);
-}
 
 function understand(raw){
   const t0=(raw||"").trim();
@@ -244,20 +225,11 @@ function locationMatch(idx,zona){
   if(!zona) return true;
   const f=IDX[idx].dirbar;
   const zn=aliasPlace(zona);
-  if(/\b(y|&|\/)\b/.test(zn)){ const parts=zn.split(/\b(?:y|&|\/)\b/).map(x=>norm(x).trim()).filter(Boolean); if(parts.length===2){ const [a,b]=parts; const ok=(f.includes(a) && f.includes(b)); if(!ok && P.debug) logWhy("No intersección: '"+a+"' y '"+b+"' no aparecen juntos en dirbar => "+f); return ok; } }
+  if(/\b(y|&|\/)\b/.test(zn)){ const parts=zn.split(/\b(?:y|&|\/)\b/).map(x=>norm(x).trim()).filter(Boolean); if(parts.length===2){ const [a,b]=parts; return (f.includes(a) && f.includes(b)); } }
   const zWords=norm(zn).split(/\s+/).filter(Boolean);
   if(zWords.some(w=>f.includes(w))) return true;
   for(let i=0;i<zWords.length-1;i++){ const bi=zWords[i]+" "+zWords[i+1]; if(f.includes(bi)) return true; }
-  const ok=f.includes(norm(zn)); if(!ok && P.debug) logWhy("Zona no matchea en dirbar => "+f);
-  return ok;
-}
-
-function scoreRow(M, qt, qnorm) {
-  let score=0;
-  if(qnorm && M.nombre===qnorm) score+=12;
-  if(qnorm && M.nombre.includes(qnorm)) score+=8;
-  qt.forEach(t=>{ if(M.nombre.includes(t)) score+=4; if(M.kw.includes(t)) score+=3; if(M.rubro.includes(t)) score+=2; });
-  return score;
+  return f.includes(norm(zn));
 }
 
 // UI
@@ -266,32 +238,19 @@ document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('qall').value="";
   document.getElementById('results').innerHTML="";
   document.getElementById('chips').innerHTML="";
-  WHY=[]; document.getElementById('dbgWhy').textContent="-";
   NEAR_ACTIVE=false; document.getElementById('gpsHint').style.display='none';
   document.getElementById('error').style.display='none';
-  document.getElementById('dbgTok').textContent="";
-  document.getElementById('dbgQ').textContent="";
-  document.getElementById('dbgZ').textContent="";
-  document.getElementById('dbgRes').textContent="";
 });
 document.getElementById('qall').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); buscar(); } });
 document.getElementById('locBtn').addEventListener('click',()=>{
-  USER_POS={lat:-34.6037,lng:-58.3816};
-  NEAR_ACTIVE=true;
-  document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
-  document.getElementById('gpsHint').style.display='block';
-  buscar();
+  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR_ACTIVE=true; document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); return; }
+  navigator.geolocation.getCurrentPosition(pos=>{ USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude}; NEAR_ACTIVE=true; document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); },()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR_ACTIVE=true; document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); },{enableHighAccuracy:true,timeout:8000,maximumAge:0});
 });
 
 function buscar(){
   if(!LOADED){ alert("Cargando datos…"); return; }
-  WHY=[];
   const raw=document.getElementById('qall').value;
   let {q,z,wantsNear}=understand(raw);
-  document.getElementById('dbgQ').textContent=q;
-  document.getElementById('dbgZ').textContent=z;
-  document.getElementById('dbgMode').textContent = NEAR_ACTIVE? "cercanos":"texto";
-  const tok = toks(q); document.getElementById('dbgTok').textContent=tok.join(" ");
   if(wantsNear || NEAR_ACTIVE){ if(!USER_POS) USER_POS={lat:-34.6037,lng:-58.3816}; NEAR_ACTIVE=true; z=""; document.getElementById('gpsHint').style.display='block'; }
   document.getElementById('chips').innerHTML=[
     z?`<div class="chip"><strong>Zona:</strong> ${z}</div>`:'',
@@ -299,9 +258,15 @@ function buscar(){
     (NEAR_ACTIVE&&USER_POS)?`<div class="chip"><strong>Modo:</strong> cercanos</div>`:''
   ].join('');
   const items=buscarInterno(q,z);
-  document.getElementById('dbgRes').textContent = items.length+" item(s)";
-  if(P.debug) document.getElementById('dbgWhy').textContent = WHY.length? WHY.join("\n") : "(sin descartes)";
   render(items,q,z);
+}
+
+function scoreRow(M, qt, qnorm) {
+  let score=0;
+  if(qnorm && M.nombre===qnorm) score+=12;
+  if(qnorm && M.nombre.includes(qnorm)) score+=8;
+  qt.forEach(t=>{ if(M.nombre.includes(t)) score+=4; if(M.kw.includes(t)) score+=3; if(M.rubro.includes(t)) score+=2; });
+  return score;
 }
 
 function buscarInterno(q,z){
@@ -317,11 +282,11 @@ function buscarInterno(q,z){
     return inside.slice(0,20);
   }
 
-  let arr = DATA.map((row,idx)=>{ const M=IDX[idx]; let score=scoreRow(M, qt, qnorm); if(z && !locationMatch(idx,z)) score=-1; let distKm=null; if(score>=0 && USER_POS && Number.isFinite(M.lat) && Number.isFinite(M.lng)){ distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng}); score+=Math.max(0,2-(distKm/1.5)); } if(score<=0){ if(P.debug) logWhy("Descartado por score<=0 — nombre:'"+M.nombre+"' rubro:'"+M.rubro+"' kw:'"+M.kw+"'"); } return score>0? { l:{...row,_distKm:distKm,_idx:idx}, score, M } : null; }).filter(Boolean);
+  let arr = DATA.map((row,idx)=>{ const M=IDX[idx]; let score=scoreRow(M, qt, qnorm); if(z && !locationMatch(idx,z)) score=-1; let distKm=null; if(score>=0 && USER_POS && Number.isFinite(M.lat) && Number.isFinite(M.lng)){ distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng}); score+=Math.max(0,2-(distKm/1.5)); } return { l:{...row,_distKm:distKm,_idx:idx}, score, M }; }).filter(x=>x.score>0);
 
   if(arr.length===0 && qnorm){
     const qtok = qnorm.split(/\s+/).filter(Boolean);
-    arr = DATA.map((row,idx)=>{ const M=IDX[idx]; const hay = qtok.some(t=> M.nombre.includes(t) || M.rubro.includes(t) || M.kw.includes(t)); if(!hay){ if(P.debug) logWhy("Fallback: tampoco hay substring en idx "+idx); return null; } return { l:{...row,_distKm:null,_idx:idx}, score:1, M }; }).filter(Boolean);
+    arr = DATA.map((row,idx)=>{ const M=IDX[idx]; const hay = qtok.some(t=> M.nombre.includes(t) || M.rubro.includes(t) || M.kw.includes(t)); if(!hay) return null; return { l:{...row,_distKm:null,_idx:idx}, score:1, M }; }).filter(Boolean);
   }
 
   return arr.sort((a,b)=>b.score-a.score).slice(0,30).map(x=>x.l);
@@ -329,7 +294,7 @@ function buscarInterno(q,z){
 
 function render(items,q,z){
   const box=document.getElementById('results');
-  if(!items.length){ box.innerHTML='<div class="empty">No encontré opciones.</div>'; return; }
+  if(!items.length){ box.innerHTML='<div class="empty">No encontré opciones.</div>' + suggest(q,z); return; }
   box.innerHTML=items.map(r=>{ const name=r.nombre_local||r.nombre||r.local||'(sin nombre)'; const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`; const wa=r.whatsapp?("https://wa.me/54"+String(r.whatsapp).replace(/[^0-9]/g,"")):null; const dist=(typeof r._distKm==='number')?`<div class="meta">≈ ${(r._distKm*10).toFixed(0)} cuadras</div>`:''; const promo=IDX[r._idx]?IDX[r._idx].promo_raw:"";
     return `<div class="card">
       <div class="title">${name} — <span>${r.rubro||''}</span></div>
@@ -344,8 +309,25 @@ function render(items,q,z){
     </div>`; }).join("");
 }
 
-// start
-loadData();
+function suggest(q,z){
+  const hints=[]; const t=norm(q||"");
+  if(t.includes("comid")) hints.push("Probá: gastronomía, almorzar, bar");
+  if(t.includes("libro")||t.includes("librer")) hints.push("Probá: librería, papelería");
+  if(t.includes("ferret")||t.includes("clavo")||t.includes("tornillo")) hints.push("Probá: ferretería");
+  if(z && /\b(y|&|\/)\b/.test(z)) hints.push("Intersección: 'Corrientes y 9 de Julio'");
+  return hints.length?`<div class="sugg"><strong>Sugerencias:</strong> ${hints.join(" · ")}</div>`:"";
+}
+
+// mic
+(function(){
+  const btn=document.getElementById('micBtn');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ btn.disabled=true; btn.innerText='🎤—'; btn.title='Dictado no disponible en este navegador.'; return; }
+  const rec=new SR(); rec.lang='es-AR'; rec.interimResults=false; rec.maxAlternatives=1;
+  btn.addEventListener('click',()=>{ try{ rec.start(); btn.innerText='⏺️'; }catch(e){} });
+  rec.onresult=e=>{ const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); };
+  rec.onend=()=>{ btn.innerText='🎤'; };
+})();
 </script>
 </body>
 </html>
