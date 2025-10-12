@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Aquí Nomás — estable (GPS + fallback)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%230b5cff'/%3E%3Ctext x='50' y='58' font-size='42' text-anchor='middle' fill='white' font-family='Arial'%3EAN%3C/text%3E%3C/svg%3E">
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -26,6 +27,7 @@ h1{font-size:20px;margin:0 0 14px}
 .promo{margin:6px 0 10px;color:#0b5cff}
 .meta{font-size:12px;color:#566}
 .empty{padding:12px;color:#666}
+.err{padding:12px;background:#fff3f3;border:1px solid #ffd2d2;color:#7a1a1a;border-radius:12px}
 </style>
 </head>
 <body>
@@ -44,15 +46,33 @@ h1{font-size:20px;margin:0 0 14px}
     <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">
       📍 Mostrando locales ≤ <span id="nearKm">1.5</span> km (auto-expande a 2 y 3 km si hace falta).
     </div>
+    <div class="tiny" id="srcHint" style="margin-top:6px;display:none"></div>
   </div>
 
+  <div id="error" style="display:none" class="box err"></div>
   <div id="results" class="box"></div>
 </div>
 
 <script>
-/* === TU CSV PUBLICADO (output=csv) === */
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
-/* ==================================== */
+/* ========= Fuente CSV =========
+   - Por defecto usa la URL base (tu Sheet publicado)
+   - Puede sobreescribirse con ?csv=... o #csv=...
+   - Se agrega cache-busting (?v=timestamp) para evitar caché vieja
+*/
+const DEFAULT_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsfhmidUT4vOSY5u0TCi_7IlrpRcYi29_VF2-qgQniySHAfG18eNYoyvQ_Bqf0iB6nZaOaSXGBqUXP/pub?gid=0&single=true&output=csv";
+function getParamCSV(){
+  const q = new URLSearchParams(location.search);
+  const urlQ = q.get("csv");
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const urlH = hash.get("csv");
+  return (urlQ || urlH || DEFAULT_CSV).trim();
+}
+const CSV_URL = (()=>{
+  const base = getParamCSV();
+  const sep = base.includes("?") ? "&" : "?";
+  return base + sep + "v=" + Date.now();
+})();
+/* ============================= */
 
 /* utilidades base */
 const STOP = new Set(["hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle","cerca"]);
@@ -102,12 +122,15 @@ function haversineKm(a,b){
 
 /* estado */
 let USER_POS=null, NEAR_ACTIVE=false;
-let NEAR_RADIUS_KM=1.5; // radio objetivo (auto-expande a 2 y 3 si hay pocos resultados)
+let NEAR_RADIUS_KM=1.5; // auto-expande a 2 y 3 si hay pocos resultados
 let DATA=[], IDX=[], LOADED=false;
 
 /* carga CSV + índice */
 fetch(CSV_URL,{cache:"no-store"})
-  .then(r=>r.text())
+  .then(r=>{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.text();
+  })
   .then(t=>{
     DATA=parseCSV(t);
     IDX=DATA.map(row=>{
@@ -119,8 +142,21 @@ fetch(CSV_URL,{cache:"no-store"})
       return {nombre,rubro,kw,dirbar,lat,lng};
     });
     LOADED=true;
+    showSrcHint();
   })
-  .catch(()=>alert("No pude cargar la base (CSV)."));
+  .catch((e)=>{
+    const err=document.getElementById('error');
+    err.style.display='block';
+    err.innerHTML = "No pude cargar la base (CSV). Verificá: <ul style='margin:6px 0 0 18px'><li>Que el enlace sea de Google Sheets con ‘Publicar en la web’ en formato CSV.</li><li>Que estés usando la hoja correcta (gid).</li><li>Probá abrir el CSV en otra pestaña; si carga, pegá ese URL con ?csv=... en esta página.</li></ul><div style='margin-top:6px;font-size:12px;color:#666'>Detalle: "+(e.message||e)+"</div>";
+  });
+
+function showSrcHint(){
+  const u=getParamCSV();
+  if(!u) return;
+  const el=document.getElementById('srcHint');
+  el.style.display='block';
+  el.textContent = "Fuente CSV activa: " + u;
+}
 
 /* parser de frases */
 function understand(raw){
@@ -165,12 +201,12 @@ document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('results').innerHTML="";
   document.getElementById('chips').innerHTML="";
   NEAR_ACTIVE=false; document.getElementById('gpsHint').style.display='none';
+  document.getElementById('error').style.display='none';
 });
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 document.getElementById('locBtn').addEventListener('click',()=>{
   if(!navigator.geolocation){
-    // Fallback directo si el navegador no tiene geolocalización
-    USER_POS={lat:-34.6037,lng:-58.3816}; // Obelisco
+    USER_POS={lat:-34.6037,lng:-58.3816}; // Obelisco (fallback)
     NEAR_ACTIVE=true;
     document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
     document.getElementById('gpsHint').style.display='block';
@@ -184,8 +220,7 @@ document.getElementById('locBtn').addEventListener('click',()=>{
     document.getElementById('gpsHint').style.display='block';
     buscar();
   },()=>{
-    // Fallback si el usuario niega permisos
-    USER_POS={lat:-34.6037,lng:-58.3816}; // Obelisco
+    USER_POS={lat:-34.6037,lng:-58.3816}; // Fallback si niega permisos
     NEAR_ACTIVE=true;
     document.getElementById('nearKm').textContent=NEAR_RADIUS_KM.toFixed(1);
     document.getElementById('gpsHint').style.display='block';
@@ -200,10 +235,10 @@ function buscar(){
   const raw=document.getElementById('qall').value;
   let {q,z,wantsNear}=understand(raw);
 
-  // activar NEAR por palabra o botón; si no hay GPS, usar fallback Obelisco
+  // modo CERCA: filtra por radio ignorando zona; si faltan lat/lng, esos ítems quedan para búsqueda normal
   if(wantsNear || NEAR_ACTIVE){
     if(!USER_POS){ USER_POS={lat:-34.6037,lng:-58.3816}; } // fallback silencioso
-    NEAR_ACTIVE=true; z=""; // NEAR ignora zona
+    NEAR_ACTIVE=true; z="";
     document.getElementById('gpsHint').style.display='block';
   }
 
@@ -220,11 +255,10 @@ function buscarInterno(q,z){
   const qnorm=norm(q);
   const qt=toks(q);
 
-  // —— modo CERCA: filtra por radio (y auto-expande) ignorando zona
   if(NEAR_ACTIVE && USER_POS){
     const withDist = DATA.map((row,idx)=>{
       const M=IDX[idx];
-      if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
+      if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null; // sin coords no entran en "cerca"
       const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
       return {...row,_distKm:d};
     }).filter(Boolean)
@@ -239,7 +273,7 @@ function buscarInterno(q,z){
     return inside.slice(0,20);
   }
 
-  // —— búsqueda normal con intención + zona
+  // búsqueda normal (texto + zona). Ítems sin lat/lng se listan igual, sólo sin "≈ cuadras"
   return DATA.map((row,idx)=>{
     const M=IDX[idx];
     let score=0;
@@ -258,7 +292,7 @@ function buscarInterno(q,z){
     let distKm=null;
     if(score>=0 && USER_POS && Number.isFinite(M.lat) && Number.isFinite(M.lng)){
       distKm=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
-      score+=Math.max(0,2-(distKm/1.5)); // bonus por cercanía
+      score+=Math.max(0,2-(distKm/1.5));
     }
     return { l:{...row,_distKm:distKm}, score };
   })
