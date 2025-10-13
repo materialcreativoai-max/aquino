@@ -4,31 +4,31 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — FINAL v4.1</title>
+<title>Aquí Nomás — FINAL v4.2</title>
 <style>
-:root{--pri:#0b5cff;}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
-.wrap{max-width:860px;margin:0 auto;padding:18px}
-h1{font-size:20px;margin:0 0 14px}
-.box{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:14px;margin:0 0 14px}
-.row{display:flex;gap:8px;flex-wrap:wrap}
-.input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #cfd6e0;border-radius:12px;font-size:15px}
-.btn{padding:12px 14px;border-radius:12px;border:1px solid var(--pri);background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
-.btn.secondary{background:#fff;color:var(--pri)}
-.btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
-.btn.mic{border:1px dashed var(--pri);background:#eef3ff}
-.tiny{font-size:12px;color:#667}
-.card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0}
-.title{font-weight:700;margin-bottom:4px}
-.title span{font-weight:600;color:#555}
-.meta{font-size:12px;color:#566}
-.err{padding:12px;background:#fff3f3;border:1px solid #ffd2d2;color:#7a1a1a;border-radius:12px;margin-bottom:12px}
-.ok{padding:10px 12px;background:#eef9f1;border:1px solid #cfead8;border-radius:10px;margin-bottom:12px;color:#145a32}
+:root { --pri:#0b5cff; }
+body { font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; margin:0; background:#f7f9fb; color:#0b1220; }
+.wrap { max-width:860px; margin:0 auto; padding:18px; }
+h1 { font-size:20px; margin:0 0 14px; }
+.box { background:#fff; border:1px solid #e6e9ee; border-radius:14px; padding:14px; margin:0 0 14px; }
+.row { display:flex; gap:8px; flex-wrap:wrap; }
+.input { flex:1; min-width:260px; padding:12px 14px; border:1px solid #cfd6e0; border-radius:12px; font-size:15px; }
+.btn { padding:12px 14px; border-radius:12px; border:1px solid var(--pri); background:var(--pri); color:#fff; font-weight:600; cursor:pointer; }
+.btn.secondary { background:#fff; color:var(--pri); }
+.btn.ghost { background:#fff; border-color:#cfd6e0; color:#0b1220; }
+.btn.mic { border:1px dashed var(--pri); background:#eef3ff; }
+.tiny { font-size:12px; color:#667; }
+.card { background:#fff; border:1px solid #e6e9ee; border-radius:14px; padding:12px; margin:10px 0; }
+.title { font-weight:700; margin-bottom:4px; }
+.title span { font-weight:600; color:#555; }
+.meta { font-size:12px; color:#566; }
+.err { padding:12px; background:#fff3f3; border:1px solid #ffd2d2; color:#7a1a1a; border-radius:12px; margin-bottom:12px; }
+.ok { padding:10px 12px; background:#eef9f1; border:1px solid #cfead8; border-radius:10px; margin-bottom:12px; color:#145a32; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — FINAL v4.1</h1>
+  <h1>🏷️ Aquí Nomás — FINAL v4.2</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
@@ -57,52 +57,52 @@ document.getElementById('srcHint').textContent = "Fuente CSV: " + CSV_URL;
 function removeDiacritics(str){ return str.normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
 const norm = s => removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
 function parseCSV(txt){
-  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
-  const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\s+/g,'_'));
-  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+  const rows = txt.trim().split(/\r?\n/).map(r => r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g,'')));
+  const head = rows.shift().map(h => String(h).trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r => Object.fromEntries(head.map((h,i) => [h, (r[i]||"").trim()])));
 }
 function parseCoord(v){
   if(v==null||v==="") return NaN;
-  let s=String(v).trim(); const isNeg=/^\s*-/.test(s);
-  s=s.replace(/,/g,'.'); const parts=s.split('.');
-  if(parts.length>2) s=parts[0]+'.'+parts.slice(1).join('');
-  let n=Number(s);
-  if(Number.isNaN(n)){ const digits=s.replace(/[^0-9]/g,''); if(digits.length>=7){ n=parseInt(digits,10)/1e6; if(isNeg) n=-Math.abs(n);}}
+  let s = String(v).trim(); const isNeg = /^\s*-/.test(s);
+  s = s.replace(/,/g,'.'); const parts = s.split('.');
+  if(parts.length>2) s = parts[0]+'.'+parts.slice(1).join('');
+  let n = Number(s);
+  if(Number.isNaN(n)){ const digits = s.replace(/[^0-9]/g,''); if(digits.length>=7){ n = parseInt(digits,10)/1e6; if(isNeg) n = -Math.abs(n); } }
   if(Math.abs(n)>180) n/=1e6; return n;
 }
 function haversineKm(a,b){
-  const R=6371,toRad=x=>x*Math.PI/180;
-  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
-  const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
+  const R=6371, toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
+  const s1=Math.sin(dLat/2), s2=Math.sin(dLng/2);
   const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
 
 // estado
 let DATA=[], IDX=[], LOADED=false;
-let USER_POS=null, NEAR=false, NEAR_KM=1.5;
+let USER_POS=null, NEAR=false;
 
 // fetch CSV
 fetch(CSV_URL,{cache:"no-store"})
  .then(r=>r.text())
  .then(t=>{
     if(/^\s*<!doctype\s+html/i.test(t)) throw new Error("El enlace no devolvió CSV (llegó HTML).");
-    DATA=parseCSV(t);
-    IDX=DATA.map(row=>{
-      const nombre=norm(row.nombre_local||row.nombre||row.local||"");
-      const rubro=norm(row.rubro||"");
-      const kw=norm( (row.keywords||"")+" "+(row.nombre_local||row.nombre||row.local||"")+" "+(row.rubro||"")+" "+(row.barrio||"") );
-      const dirbar=norm((row.direccion||"")+" "+(row.barrio||""));
+    DATA = parseCSV(t);
+    IDX = DATA.map(row=>{
+      const nombre = norm(row.nombre_local||row.nombre||row.local||"");
+      const rubro  = norm(row.rubro||"");
+      const kw     = norm((row.keywords||"")+" "+(row.nombre_local||row.nombre||row.local||"")+" "+(row.rubro||"")+" "+(row.barrio||""));
+      const dirbar = norm((row.direccion||"")+" "+(row.barrio||""));
       const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
       return {nombre,rubro,kw,dirbar,lat,lng};
     });
-    LOADED=true;
-    const ok=document.getElementById('status'); ok.style.display='block';
-    ok.textContent="CSV cargado OK · filas: "+DATA.length;
+    LOADED = true;
+    const ok = document.getElementById('status'); ok.style.display='block';
+    ok.textContent = "CSV cargado OK · filas: " + DATA.length;
  })
  .catch(e=>{
-    const el=document.getElementById('error'); el.style.display='block';
-    el.textContent="No se pudo leer el CSV. "+(e.message||e);
+    const el = document.getElementById('error'); el.style.display='block';
+    el.textContent = "No se pudo leer el CSV. " + (e.message||e);
  });
 
 // stopwords + sinónimos
@@ -122,7 +122,7 @@ document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('results').innerHTML="";
   NEAR=false; document.getElementById('gpsHint').style.display='none';
 });
-document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
+document.getElementById('qall').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); buscar(); } });
 document.getElementById('locBtn').addEventListener('click',()=>{
   if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; document.getElementById('gpsHint').style.display='block'; buscar(); return; }
   navigator.geolocation.getCurrentPosition(pos=>{ USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude}; NEAR=true; document.getElementById('gpsHint').style.display='block'; buscar(); },()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; document.getElementById('gpsHint').style.display='block'; buscar(); },{enableHighAccuracy:true,timeout:8000,maximumAge:0});
@@ -132,11 +132,11 @@ document.getElementById('locBtn').addEventListener('click',()=>{
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){btn.disabled=true;btn.innerText='🎤—';btn.title='Dictado no disponible en este navegador.';return;}
-  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.maxAlternatives=1;
-  btn.addEventListener('click',()=>{try{rec.start();btn.innerText='⏺️';}catch(e){}});
-  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar();};
-  rec.onend=()=>{btn.innerText='🎤';};
+  if(!SR){ btn.disabled=true; btn.innerText='🎤—'; btn.title='Dictado no disponible en este navegador.'; return; }
+  const rec=new SR(); rec.lang='es-AR'; rec.interimResults=false; rec.maxAlternatives=1;
+  btn.addEventListener('click',()=>{ try{ rec.start(); btn.innerText='⏺️'; }catch(e){} });
+  rec.onresult=e=>{ const t=e.results[0][0].transcript||''; document.getElementById('qall').value=t.trim(); buscar(); };
+  rec.onend=()=>{ btn.innerText='🎤'; };
 })();
 
 function nearSearch(){
@@ -153,6 +153,7 @@ function nearSearch(){
   if(inside.length<3){ radius=3.0; inside=list.filter(o=>o.dist<=radius); }
 
   document.getElementById('nearKm').textContent=radius.toFixed(1);
+  document.getElementById('gpsHint').textContent = "📍 Mostrando ≤ " + radius.toFixed(1) + " km.";
   document.getElementById('gpsHint').style.display='block';
   return inside.slice(0,40);
 }
@@ -214,14 +215,16 @@ function render(arr){
     const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
     const maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((r.direccion||'')+' '+(r.barrio||''));
     const dist=(typeof o.dist==='number' && isFinite(o.dist))?('<div class="meta">≈ '+(o.dist*10).toFixed(0)+' cuadras</div>'):'';
-    return '<div class="card">'
-      + '<div class="title">'+name+' — <span>'+(r.rubro||'')+'</span></div>'
-      + '<div>'+(r.direccion||'')+' '+(r.barrio?('('+(r.barrio)+')'):'')+'</div>'
-      + dist
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
-      + '<a class="btn secondary" target="_blank" href="'+maps+'">Cómo llegar</a>'
-      + '</div>'
-      + '</div>';
+    return `
+      <div class="card">
+        <div class="title">${name} — <span>${r.rubro||''}</span></div>
+        <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
+        ${dist}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
+        </div>
+      </div>
+    `;
   }).join("");
 }
 </script>
