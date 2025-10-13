@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — estable v4.8</title>
+<title>Aquí Nomás — estable v4.9</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -23,18 +23,17 @@ h1{font-size:20px;margin:0 0 14px}
 .meta{font-size:12px;color:#566}
 .err{padding:8px 10px;background:#fff3f3;border:1px solid #ffd2d2;border-radius:10px;margin-bottom:12px;color:#7a1a1a}
 .ok{padding:8px 10px;background:#eef9f1;border:1px solid #cfead8;border-radius:10px;margin-bottom:12px;color:#145a32}
-.badge{display:inline-block;padding:4px 8px;background:#eef3ff;border:1px solid #d7e3ff;color:#153a9b;border-radius:999px;font-size:12px;margin-right:6px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — estable v4.8</h1>
+  <h1>🏷️ Aquí Nomás — estable v4.9</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'cerca', 'almorzar en recoleta', 'librería en el centro'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'cerca', 'almorzar en recoleta', 'santa fe', 'librería en el centro'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -52,7 +51,15 @@ const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V
 
 // utils
 function removeDiacritics(str){return str.normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
-const norm=s=>removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+function aliasPhrases(s){
+  // colapsamos algunas calles compuestas para evitar tokens sueltos
+  return s
+    .replace(/\bsanta\s+fe\b/g,"santafe")
+    .replace(/\bsan\s+nicolas\b/g,"sannicolas");
+}
+const normRaw = s => aliasPhrases(removeDiacritics(String(s||"").toLowerCase()));
+const norm = s => normRaw(s).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+
 function parseCSV(txt){
   const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
   const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\s+/g,"_"));
@@ -88,6 +95,7 @@ fetch(CSV_URL,{cache:"no-store"})
       const nombre=norm(row.nombre_local||row.nombre||row.local||"");
       const rubro=norm(row.rubro||"");
       const kw=norm((row.keywords||"")+" "+(row.nombre_local||row.nombre||"")+" "+(row.rubro||"")+" "+(row.barrio||""));
+      // importante: normalizamos dir+barrio con alias (santafe, etc.)
       const dirbar=norm((row.direccion||"")+" "+(row.barrio||""));
       const lat=parseCoord(row.lat),lng=parseCoord(row.lng);
       return{nombre,rubro,kw,dirbar,lat,lng};
@@ -106,7 +114,10 @@ const STOP=new Set(["hola","buenas","busco","un","una","el","la","en","por","a",
 const BARRIOS=["microcentro","centro","recoleta","palermo","belgrano","caballito","flores","retiro","san nicolas","monserrat","balvanera","almagro","boedo","san telmo","barracas","constitucion","chacarita","villa crespo","colegiales","nunez","saavedra","parque patricios","parque chas"];
 
 function tokenize(raw){
-  let t=norm(raw).split(/\s+/).filter(w=>!STOP.has(w));
+  const qn = norm(raw); // ya con alias (santafe)
+  let t=qn.split(/\s+/).filter(w=>!STOP.has(w));
+  // ignorar tokens de 1–2 letras (como "fe")
+  t=t.filter(w=>w.length>=3);
   const extra=[];
   if(t.includes("almorzar")||t.includes("almuerzo"))extra.push("almuerzo","menu","comida","gastronomia","restaurante");
   if(t.includes("centro"))extra.push("microcentro","centro");
@@ -149,15 +160,15 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   if(!SR){b.disabled=true;b.innerText='🎤—';return;}
   const rec=new SR();rec.lang='es-AR';
   b.addEventListener('click',()=>{try{rec.start();b.innerText='⏺️';}catch(e){}});
-  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar('text');};
+  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=aliasPhrases(removeDiacritics(t.toLowerCase()));buscar('text');};
   rec.onend=()=>{b.innerText='🎤';};
 })();
 
 // NEAR logic — only valid coords inside radius
-function nearList(){
+function parseNearList(){
   const withDist = DATA.map((row,i)=>{
     const M=IDX[i];
-    if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null; // solo válidos
+    if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
     const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
     return {row,i,dist:d};
   }).filter(Boolean).sort((a,b)=>a.dist-b.dist);
@@ -179,7 +190,7 @@ function buscar(source){
   const qnorm=norm(raw);
   const toks=tokenize(raw);
   const barrioQ=detectBarrio(qnorm);
-  const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria"].includes(t));
+  const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria","heladeria"].includes(t));
 
   // reset de NEAR solo si la búsqueda viene por texto y NO dice 'cerca'
   if(source==='text' && !/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
@@ -189,7 +200,7 @@ function buscar(source){
 
   // modo cerca estricto
   if(NEAR && USER_POS){
-    const arr=nearList();
+    const arr=parseNearList();
     return render(arr.length?arr:[], arr.length?null:'No hay locales cercanos en el radio.');
   }
 
