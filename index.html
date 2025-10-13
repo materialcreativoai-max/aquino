@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — FINAL v3</title>
+<title>Aquí Nomás — FINAL v4</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -27,20 +27,20 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — FINAL v3</h1>
+  <h1>🏷️ Aquí Nomás — FINAL v4</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar en el centro', 'comiditas', 'libreria', 'Corrientes y 9 de Julio'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar en el centro', 'cerca', 'comiditas', 'Corrientes y 9 de Julio'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">
-      📍 Mostrando ≤ <span id="nearKm">1.5</span> km (auto‑expande a 2 y 3 km si hay pocos resultados).
+      📍 Mostrando ≤ <span id="nearKm">1.5</span> km (auto-expande a 2 y 3 km si hay pocos resultados).
     </div>
     <div class="tiny" id="srcHint" style="margin-top:6px;"></div>
   </div>
@@ -81,12 +81,11 @@ function haversineKm(a,b){
 let DATA=[], IDX=[], LOADED=false;
 let USER_POS=null, NEAR=false, NEAR_KM=1.5;
 
-// fetch CSV (simple; la publicación ya es CSV real)
+// fetch CSV
 fetch(CSV_URL,{cache:"no-store"})
  .then(r=>r.text())
  .then(t=>{
-    const looksHTML = /^\s*<!doctype\s+html/i.test(t);
-    if(looksHTML) throw new Error("El enlace no devolvió CSV (llegó HTML).");
+    if(/^\s*<!doctype\s+html/i.test(t)) throw new Error("El enlace no devolvió CSV (llegó HTML).");
     DATA=parseCSV(t);
     IDX=DATA.map(row=>{
       const nombre=norm(row.nombre_local||row.nombre||row.local||"");
@@ -109,16 +108,11 @@ fetch(CSV_URL,{cache:"no-store"})
 const STOP = new Set(["","hola","buenas","buenos","dias","tardes","noches","necesito","quiero","busco","buscar","comprar","un","una","unos","unas","de","para","con","el","la","los","las","en","por","y","o","a","al","del","estoy","aca","aqui","ahora","porfavor","porfa","avenida","av","sobre","calle"]);
 function tokenize(raw){
   let t = norm(raw).split(/\s+/).filter(w=>!STOP.has(w));
-  // sinónimos mínimos
   const extra = [];
   if(t.includes("almorzar")||t.includes("almuerzo")||t.includes("almuerzos")) extra.push("almuerzo","menu","comida","gastronomia","restaurante","almorzar");
   if(t.includes("centro")) extra.push("microcentro","centro");
   return Array.from(new Set(t.concat(extra)));
 }
-
-// intersecciones
-function isIntersectionQuery(raw){ return /\b(y|&|\/)\b/i.test(raw); }
-function splitIntersection(raw){ const parts = norm(raw).split(/\b(?:y|&|\/)\b/).map(s=>s.trim()); return [parts[0]||"", parts[1]||""]; }
 
 // UI
 document.getElementById('goBtn').addEventListener('click',buscar);
@@ -144,61 +138,86 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   rec.onend=()=>{btn.innerText='🎤';};
 })();
 
+function nearSearch(){
+  // calcula distancias y autoexpande 1.5 -> 2 -> 3 km si hace falta
+  const list = DATA.map((row,idx)=>{
+    const M=IDX[idx];
+    if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
+    const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
+    return {row, idx, dist:d};
+  }).filter(Boolean).sort((a,b)=>a.dist-b.dist);
+
+  let radius=1.5;
+  let inside=list.filter(o=>o.dist<=radius);
+  if(inside.length<3){ radius=2.0; inside=list.filter(o=>o.dist<=radius); }
+  if(inside.length<3){ radius=3.0; inside=list.filter(o=>o.dist<=radius); }
+
+  document.getElementById('nearKm').textContent=radius.toFixed(1);
+  document.getElementById('gpsHint').style.display='block';
+  return inside.slice(0,40);
+}
+
 function buscar(){
   if(!LOADED){ alert("Esperá que cargue el CSV…"); return; }
   const rawQ = document.getElementById('qall').value || "";
+  const qnorm = norm(rawQ);
   const toks = tokenize(rawQ);
 
-  let items = DATA.map((row,idx)=>({ row,idx }));
+  // activar "cerca" por texto
+  if(/\bcerca(s|nos)?\b/.test(qnorm)){
+    if(!USER_POS){ USER_POS={lat:-34.6037,lng:-58.3816}; }
+    NEAR=true;
+  }
 
   if(NEAR && USER_POS){
-    // calcular distancias
-    let list = items.map(o=>{
-      const M=IDX[o.idx];
-      if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return {...o,dist:Infinity};
-      return {...o, dist:haversineKm(USER_POS,{lat:M.lat,lng:M.lng})};
-    }).sort((a,b)=>a.dist-b.dist);
-
-    // radio con auto-expansión si hay pocos
-    let radius = 1.5;
-    let inside = list.filter(o=>o.dist<=radius);
-    if(inside.length<3){ radius = 2.0; inside = list.filter(o=>o.dist<=radius); }
-    if(inside.length<3){ radius = 3.0; inside = list.filter(o=>o.dist<=radius); }
-
-    document.getElementById('nearKm').textContent = radius.toFixed(1);
-    document.getElementById('gpsHint').style.display='block';
-    render(inside.slice(0,40));
-    return;
+    return render(nearSearch());
   }
 
-  if(toks.length){
-    // scoring flexible
+  let items = DATA.map((row,idx)=>({ row,idx,score:0 }));
+
+  // INTENCIÓN: "almorzar en el centro"
+  const wantsLunch = /(almorzar|almuerzo|men[uú]|comida|restaurante|gastronom[íi]a)/i.test(rawQ);
+  const wantsCentro = /(centro|microcentro)/i.test(rawQ);
+  if(wantsLunch){
     items = items.map(o=>{
-      const M=IDX[o.idx];
-      let score=0;
-      toks.forEach(t=>{
-        if(M.nombre.includes(t)) score+=3;
-        if(M.kw.includes(t)) score+=2;
-        if(M.rubro.includes(t)) score+=1;
-        if(M.dirbar.includes(t)) score+=1;
-      });
-      return {...o,score};
-    }).filter(o=>o.score>0).sort((a,b)=>b.score-a.score);
+      const M=IDX[o.idx]; let sc=o.score;
+      if(M.rubro.includes("gastronomia")) sc+=3;
+      if(/(almuerzo|menu|comida|restaurante)/.test(M.kw)) sc+=2;
+      if(wantsCentro && /(centro|microcentro)/.test(M.dirbar)) sc+=2;
+      return {...o,score:sc};
+    }).filter(o=>o.score>0);
   }
+
+  // scoring general por tokens (si hay)
+  if(toks.length){
+    items = items.map(o=>{
+      const M=IDX[o.idx]; let sc=o.score;
+      toks.forEach(t=>{
+        if(M.nombre.includes(t)) sc+=3;
+        if(M.kw.includes(t)) sc+=2;
+        if(M.rubro.includes(t)) sc+=1;
+        if(M.dirbar.includes(t)) sc+=1;
+      });
+      return {...o,score:sc};
+    }).filter(o=>o.score>0);
+  }
+
+  // ordenar por score
+  items.sort((a,b)=>b.score-a.score);
 
   render(items.slice(0,40));
 }
 
 function render(arr){
   const box=document.getElementById('results');
-  if(!arr.length){ box.innerHTML='<div class="tiny">Sin resultados. Probá una palabra más general.</div>'; return; }
+  if(!arr.length){ box.innerHTML='<div class="tiny">Sin resultados. Probá otra palabra o zona.</div>'; return; }
   box.innerHTML = arr.map(o=>{
     const r=o.row;
     const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
     const maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((r.direccion||'')+' '+(r.barrio||''));
     const dist=(typeof o.dist==='number' && isFinite(o.dist))?('<div class="meta">≈ '+(o.dist*10).toFixed(0)+' cuadras</div>'):'';
     return '<div class="card">'
-      + '<div class="title">'+name+' — <span>'+(r.rubro||'')+'</span></div>'
+      + '<div class="title">'+name+' — <span>'+(r.rubro||'')+'</span></div>"
       + '<div>'+(r.direccion||'')+' '+(r.barrio?('('+(r.barrio)+')'):'')+'</div>'
       + dist
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
