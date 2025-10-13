@@ -1,9 +1,10 @@
+
 <!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — FINAL v4</title>
+<title>Aquí Nomás — FINAL v4.1</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -27,7 +28,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — FINAL v4</h1>
+  <h1>🏷️ Aquí Nomás — FINAL v4.1</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
@@ -139,7 +140,6 @@ document.getElementById('locBtn').addEventListener('click',()=>{
 })();
 
 function nearSearch(){
-  // calcula distancias y autoexpande 1.5 -> 2 -> 3 km si hace falta
   const list = DATA.map((row,idx)=>{
     const M=IDX[idx];
     if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
@@ -188,7 +188,6 @@ function buscar(){
     }).filter(o=>o.score>0);
   }
 
-  // scoring general por tokens (si hay)
   if(toks.length){
     items = items.map(o=>{
       const M=IDX[o.idx]; let sc=o.score;
@@ -202,7 +201,6 @@ function buscar(){
     }).filter(o=>o.score>0);
   }
 
-  // ordenar por score
   items.sort((a,b)=>b.score-a.score);
 
   render(items.slice(0,40));
@@ -217,7 +215,7 @@ function render(arr){
     const maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((r.direccion||'')+' '+(r.barrio||''));
     const dist=(typeof o.dist==='number' && isFinite(o.dist))?('<div class="meta">≈ '+(o.dist*10).toFixed(0)+' cuadras</div>'):'';
     return '<div class="card">'
-      + '<div class="title">'+name+' — <span>'+(r.rubro||'')+'</span></div>"
+      + '<div class="title">'+name+' — <span>'+(r.rubro||'')+'</span></div>'
       + '<div>'+(r.direccion||'')+' '+(r.barrio?('('+(r.barrio)+')'):'')+'</div>'
       + dist
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
