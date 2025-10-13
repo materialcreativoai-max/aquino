@@ -14,6 +14,8 @@ h1{font-size:20px;margin:0 0 14px}
 .input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #cfd6e0;border-radius:12px;font-size:15px}
 .btn{padding:12px 14px;border-radius:12px;border:1px solid var(--pri);background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
 .btn.secondary{background:#fff;color:var(--pri)}
+.btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
+.btn.mic{border:1px dashed var(--pri);background:#eef3ff}
 .tiny{font-size:12px;color:#667}
 .card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0}
 .title{font-weight:700;margin-bottom:4px}
@@ -31,9 +33,11 @@ h1{font-size:20px;margin:0 0 14px}
 
   <div class="box">
     <div class="row">
-      <input id="q" class="input" autofocus placeholder="Ej: 'comiditas', 'libreria', 'Corrientes y 9 de Julio', 'Flores'"/>
-      <button id="go" class="btn">Buscar</button>
-      <button id="near" class="btn secondary">📍 Cerca</button>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'comiditas', 'libreria', 'Corrientes y 9 de Julio', 'Flores'"/>
+      <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
+      <button id="goBtn" class="btn">Buscar</button>
+      <button id="clearBtn" class="btn ghost">Limpiar</button>
+      <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="tiny" id="gpsHint" style="margin-top:6px;display:none">
       📍 Mostrando ≤ <span id="nearKm">1.5</span> km.
@@ -45,21 +49,19 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-// === CSV FIJO ===
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 document.getElementById('srcHint').textContent = "Fuente CSV: " + CSV_URL;
 
-// === utilidades ===
-function removeDiacritics(str) { return str.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
-const norm = s => removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+function removeDiacritics(str) { return str.normalize("NFD").replace(/[\\u0300-\\u036f]/g, ""); }
+const norm = s => removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\\s]/g," ").replace(/\\s+/g," ").trim();
 function parseCSV(txt){
-  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
-  const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\s+/g,'_'));
+  const rows=txt.trim().split(/\\r?\\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\\s+/g,'_'));
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
 function parseCoord(v){
   if(v==null||v==="") return NaN;
-  let s=String(v).trim(); const isNeg = /^\s*-/.test(s);
+  let s=String(v).trim(); const isNeg = /^\\s*-/.test(s);
   s=s.replace(/,/g,'.'); const parts = s.split('.');
   if(parts.length>2) s = parts[0]+'.'+parts.slice(1).join('');
   let n = Number(s);
@@ -74,35 +76,11 @@ function haversineKm(a,b){
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
 
-// === estado ===
 let DATA=[], IDX=[], LOADED=false;
 let USER_POS=null, NEAR=false, NEAR_KM=1.5;
 
-// === fetch CSV con fallback a gviz ===
-async function fetchCSV(){
-  // intento 1: URL tal cual (ya tiene output=csv)
-  const u1 = CSV_URL + (CSV_URL.includes("?")?"&":"?") + "v=" + Date.now();
-  let r = await fetch(u1,{cache:"no-store"});
-  let t = await r.text();
-  let ct = r.headers.get("content-type")||"";
-  if(!(ct.includes("text/html") || /^\s*<!doctype\s+html/i.test(t))) return t;
-
-  // intento 2: gviz out:csv (por si Google devuelve HTML)
-  try {
-    const u = new URL(CSV_URL);
-    u.pathname = u.pathname.replace(/\/pub$/, "/gviz/tq");
-    u.searchParams.set("tqx","out:csv");
-    u.searchParams.set("v", Date.now());
-    r = await fetch(u.toString(), {cache:"no-store"});
-    t = await r.text();
-    ct = r.headers.get("content-type")||"";
-    if(!(ct.includes("text/html") || /^\s*<!doctype\s+html/i.test(t))) return t;
-  } catch(e) {}
-
-  throw new Error("Google devolvió HTML en vez de CSV. Revisá la publicación de la hoja.");
-}
-
-fetchCSV()
+fetch(CSV_URL,{cache:"no-store"})
+ .then(r=>r.text())
  .then(t=>{
     DATA=parseCSV(t);
     IDX=DATA.map(row=>{
@@ -122,24 +100,36 @@ fetchCSV()
     el.textContent="No se pudo leer el CSV. "+(e.message||e);
  });
 
-// === UI ===
-document.getElementById('go').addEventListener('click',buscar);
-document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
-document.getElementById('near').addEventListener('click',()=>{
-  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; buscar(); return; }
-  navigator.geolocation.getCurrentPosition(p=>{ USER_POS={lat:p.coords.latitude,lng:p.coords.longitude}; NEAR=true; buscar(); },()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; buscar(); },{enableHighAccuracy:true,timeout:8000});
+document.getElementById('goBtn').addEventListener('click',buscar);
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  document.getElementById('qall').value="";
+  document.getElementById('results').innerHTML="";
+  NEAR=false; document.getElementById('gpsHint').style.display='none';
 });
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
+document.getElementById('locBtn').addEventListener('click',()=>{
+  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; document.getElementById('nearKm').textContent=NEAR_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); return; }
+  navigator.geolocation.getCurrentPosition(pos=>{ USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude}; NEAR=true; document.getElementById('nearKm').textContent=NEAR_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); },()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; document.getElementById('nearKm').textContent=NEAR_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); },{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+});
+
+(function(){
+  const btn=document.getElementById('micBtn');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){btn.disabled=true;btn.innerText='🎤—';btn.title='Dictado no disponible en este navegador.';return;}
+  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.maxAlternatives=1;
+  btn.addEventListener('click',()=>{try{rec.start();btn.innerText='⏺️';}catch(e){}});
+  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar();};
+  rec.onend=()=>{btn.innerText='🎤';};
+})();
 
 function buscar(){
   if(!LOADED){ alert("Esperá que cargue el CSV…"); return; }
-  const q = norm(document.getElementById('q').value);
-  const toks = q.split(/\s+/).filter(Boolean);
+  const q = norm(document.getElementById('qall').value);
+  const toks = q.split(/\\s+/).filter(Boolean);
 
   let items = DATA.map((row,idx)=>({ row,idx }));
 
   if(NEAR && USER_POS){
-    document.getElementById('gpsHint').style.display='block';
-    document.getElementById('nearKm').textContent=NEAR_KM.toFixed(1);
     items = items.map(o=>{
       const M=IDX[o.idx];
       if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return {...o,dist:Infinity};
@@ -148,7 +138,6 @@ function buscar(){
   } else if(q) {
     items = items.filter(o=>{
       const M=IDX[o.idx];
-      // match si cada token aparece en algún campo textual
       const hay = toks.every(t=> M.nombre.includes(t) || M.rubro.includes(t) || M.kw.includes(t) || M.dirbar.includes(t) );
       return hay;
     });
@@ -161,9 +150,9 @@ function render(arr){
   const box=document.getElementById('results');
   if(!arr.length){ box.innerHTML='<div class="tiny">Sin resultados. Probá una palabra más general.</div>'; return; }
   box.innerHTML = arr.map(o=>{
-    const r=o.row, M=IDX[o.idx];
+    const r=o.row;
     const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
-    const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
+    const maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((r.direccion||'')+' '+(r.barrio||''));
     const dist=(typeof o.dist==='number' && isFinite(o.dist))?('<div class="meta">≈ '+(o.dist*10).toFixed(0)+' cuadras</div>'):'';
     return '<div class="card">'
       + '<div class="title">'+name+' — <span>'+(r.rubro||'')+'</span></div>'
@@ -171,10 +160,4 @@ function render(arr){
       + dist
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
       + '<a class="btn secondary" target="_blank" href="'+maps+'">Cómo llegar</a>'
-      + '</div>'
-      + '</div>';
-  }).join("");
-}
-</script>
-</body>
-</html>
+      +
