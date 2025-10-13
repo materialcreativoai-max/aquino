@@ -49,11 +49,11 @@ h1{font-size:20px;margin:0 0 14px}
 </div>
 
 <script>
-// === CSV FIJO ===
+// CSV fijo (el tuyo)
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 document.getElementById('srcHint').textContent = "Fuente CSV: " + CSV_URL;
 
-// === utilidades ===
+// Utils
 function removeDiacritics(str) { return str.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 const norm = s => removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
 function parseCSV(txt){
@@ -78,16 +78,18 @@ function haversineKm(a,b){
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
 
+// Estado
 let DATA=[], IDX=[], LOADED=false;
 let USER_POS=null, NEAR=false, NEAR_KM=1.5;
 
-// fetch con fallback gviz
+// Fetch con fallback gviz
 async function fetchCSV(){
   const u1 = CSV_URL + (CSV_URL.includes("?")?"&":"?") + "v=" + Date.now();
   let r = await fetch(u1,{cache:"no-store"});
   let t = await r.text();
   let ct = r.headers.get("content-type")||"";
   if(!(ct.includes("text/html") || /^\s*<!doctype\s+html/i.test(t))) return t;
+
   try {
     const u = new URL(CSV_URL);
     u.pathname = u.pathname.replace(/\/pub$/, "/gviz/tq");
@@ -98,6 +100,7 @@ async function fetchCSV(){
     ct = r.headers.get("content-type")||"";
     if(!(ct.includes("text/html") || /^\s*<!doctype\s+html/i.test(t))) return t;
   } catch(e) {}
+
   throw new Error("Google devolvió HTML en vez de CSV.");
 }
 
@@ -121,20 +124,24 @@ fetchCSV()
     el.textContent="No se pudo leer el CSV. "+(e.message||e);
  });
 
-// helpers de intersección
+// Intersecciones
 function isIntersectionQuery(raw){ return /\b(y|&|\/)\b/i.test(raw); }
-function splitIntersection(raw){ const [a,b]=norm(raw).split(/\b(?:y|&|\/)\b/).map(s=>s.trim()); return [a||"",b||""]; }
+function splitIntersection(raw){ const parts = norm(raw).split(/\b(?:y|&|\/)\b/).map(s=>s.trim()); return [parts[0]||"", parts[1]||""]; }
 
 // UI
 document.getElementById('goBtn').addEventListener('click',buscar);
-document.getElementById('clearBtn').addEventListener('click',()=>{ document.getElementById('qall').value=""; document.getElementById('results').innerHTML=""; NEAR=false; document.getElementById('gpsHint').style.display='none'; });
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  document.getElementById('qall').value="";
+  document.getElementById('results').innerHTML="";
+  NEAR=false; document.getElementById('gpsHint').style.display='none';
+});
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 document.getElementById('locBtn').addEventListener('click',()=>{
   if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; document.getElementById('nearKm').textContent=NEAR_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); return; }
   navigator.geolocation.getCurrentPosition(pos=>{ USER_POS={lat:pos.coords.latitude,lng:pos.coords.longitude}; NEAR=true; document.getElementById('nearKm').textContent=NEAR_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); },()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; document.getElementById('nearKm').textContent=NEAR_KM.toFixed(1); document.getElementById('gpsHint').style.display='block'; buscar(); },{enableHighAccuracy:true,timeout:8000,maximumAge:0});
 });
 
-// mic
+// Micrófono
 (function(){
   const btn=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -154,12 +161,19 @@ function buscar(){
   let items = DATA.map((row,idx)=>({ row,idx }));
 
   if(NEAR && USER_POS){
-    items = items.map(o=>{ const M=IDX[o.idx]; if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return {...o,dist:Infinity}; return {...o, dist:haversineKm(USER_POS,{lat:M.lat,lng:M.lng})}; })
-                 .filter(o=>o.dist<=NEAR_KM).sort((a,b)=>a.dist-b.dist);
+    items = items.map(o=>{
+      const M=IDX[o.idx];
+      if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return {...o,dist:Infinity};
+      return {...o, dist:haversineKm(USER_POS,{lat:M.lat,lng:M.lng})};
+    }).filter(o=>o.dist<=NEAR_KM).sort((a,b)=>a.dist-b.dist);
   } else if(q) {
     items = items.filter(o=>{
       const M = IDX[o.idx];
-      if (isIntersectionQuery(rawQ)) { const [a,b]=splitIntersection(rawQ); if(!(a&&b)) return false; return M.dirbar.includes(a) && M.dirbar.includes(b); }
+      if (isIntersectionQuery(rawQ)) {
+        const [a,b] = splitIntersection(rawQ);
+        if (!(a && b)) return false;
+        return M.dirbar.includes(a) && M.dirbar.includes(b);
+      }
       return toks.some(t => M.nombre.includes(t) || M.rubro.includes(t) || M.kw.includes(t) || M.dirbar.includes(t));
     });
   }
