@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — estable v4.7</title>
+<title>Aquí Nomás — estable v4.8</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -28,7 +28,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — estable v4.7</h1>
+  <h1>🏷️ Aquí Nomás — estable v4.8</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
@@ -124,17 +124,22 @@ function barrioMatch(dirbar,barrioTerm){
 }
 
 // UI wiring
-document.getElementById('goBtn').addEventListener('click',buscar);
+document.getElementById('goBtn').addEventListener('click',()=>buscar('text'));
 document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('qall').value="";
   document.getElementById('results').innerHTML="";
   document.getElementById('gpsHint').style.display='none';
-  NEAR=false; // ← limpiar también saca el modo cerca
+  NEAR=false;
 });
-document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar('text');}});
 document.getElementById('locBtn').addEventListener('click',()=>{
-  if(!navigator.geolocation){USER_POS={lat:-34.6037,lng:-58.3816};NEAR=true;buscar();return;}
-  navigator.geolocation.getCurrentPosition(p=>{USER_POS={lat:p.coords.latitude,lng:p.coords.longitude};NEAR=true;buscar();},()=>{USER_POS={lat:-34.6037,lng:-58.3816};NEAR=true;buscar();},{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+  const after = ()=>{ NEAR=true; buscar('nearbutton'); };
+  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; after(); return; }
+  navigator.geolocation.getCurrentPosition(
+    p=>{ USER_POS={lat:p.coords.latitude,lng:p.coords.longitude}; after(); },
+    ()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; after(); },
+    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
+  );
 });
 
 // mic
@@ -144,7 +149,7 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   if(!SR){b.disabled=true;b.innerText='🎤—';return;}
   const rec=new SR();rec.lang='es-AR';
   b.addEventListener('click',()=>{try{rec.start();b.innerText='⏺️';}catch(e){}});
-  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar();};
+  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar('text');};
   rec.onend=()=>{b.innerText='🎤';};
 })();
 
@@ -168,7 +173,7 @@ function nearList(){
   return inside.slice(0,40);
 }
 
-function buscar(){
+function buscar(source){
   if(!LOADED){alert("Esperá que cargue el CSV…");return;}
   const raw=document.getElementById('qall').value||"";
   const qnorm=norm(raw);
@@ -176,8 +181,8 @@ function buscar(){
   const barrioQ=detectBarrio(qnorm);
   const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria"].includes(t));
 
-  // ⛳ si NO dice "cerca", apaga el modo NEAR (evita que quede pegado)
-  if(!/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
+  // reset de NEAR solo si la búsqueda viene por texto y NO dice 'cerca'
+  if(source==='text' && !/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
 
   // activar “cerca” por texto
   if(/\bcerca(s|nos)?\b/.test(qnorm)){ if(!USER_POS) USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; }
@@ -185,7 +190,7 @@ function buscar(){
   // modo cerca estricto
   if(NEAR && USER_POS){
     const arr=nearList();
-    return render(arr);
+    return render(arr.length?arr:[], arr.length?null:'No hay locales cercanos en el radio.');
   }
 
   // rubro + barrio → si no hay match, mensaje
