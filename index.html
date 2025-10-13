@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — estable v4.6</title>
+<title>Aquí Nomás — estable v4.7</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -28,7 +28,7 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — estable v4.6</h1>
+  <h1>🏷️ Aquí Nomás — estable v4.7</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
@@ -125,7 +125,12 @@ function barrioMatch(dirbar,barrioTerm){
 
 // UI wiring
 document.getElementById('goBtn').addEventListener('click',buscar);
-document.getElementById('clearBtn').addEventListener('click',()=>{document.getElementById('qall').value="";document.getElementById('results').innerHTML="";document.getElementById('gpsHint').style.display='none';});
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  document.getElementById('qall').value="";
+  document.getElementById('results').innerHTML="";
+  document.getElementById('gpsHint').style.display='none';
+  NEAR=false; // ← limpiar también saca el modo cerca
+});
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 document.getElementById('locBtn').addEventListener('click',()=>{
   if(!navigator.geolocation){USER_POS={lat:-34.6037,lng:-58.3816};NEAR=true;buscar();return;}
@@ -170,6 +175,9 @@ function buscar(){
   const toks=tokenize(raw);
   const barrioQ=detectBarrio(qnorm);
   const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria"].includes(t));
+
+  // ⛳ si NO dice "cerca", apaga el modo NEAR (evita que quede pegado)
+  if(!/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
 
   // activar “cerca” por texto
   if(/\bcerca(s|nos)?\b/.test(qnorm)){ if(!USER_POS) USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; }
