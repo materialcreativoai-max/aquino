@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — FINAL v4.3</title>
+<title>Aquí Nomás — FINAL v4.4</title>
 <style>
 :root { --pri:#0b5cff; }
 body { font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; margin:0; background:#f7f9fb; color:#0b1220; }
@@ -24,17 +24,18 @@ h1 { font-size:20px; margin:0 0 14px; }
 .meta { font-size:12px; color:#566; }
 .err { padding:12px; background:#fff3f3; border:1px solid #ffd2d2; color:#7a1a1a; border-radius:12px; margin-bottom:12px; }
 .ok { padding:10px 12px; background:#eef9f1; border:1px solid #cfead8; border-radius:10px; margin-bottom:12px; color:#145a32; }
+.badge { display:inline-block; padding:4px 8px; background:#eef3ff; border:1px solid #d7e3ff; color:#153a9b; border-radius:999px; font-size:12px; margin-right:6px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — FINAL v4.3</h1>
+  <h1>🏷️ Aquí Nomás — FINAL v4.4</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar en recoleta', 'cerca', 'comiditas', 'Corrientes y 9 de Julio'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'almorzar en recoleta', 'almorzar en el centro', 'cerca'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -44,6 +45,7 @@ h1 { font-size:20px; margin:0 0 14px; }
       📍 Mostrando ≤ <span id="nearKm">1.5</span> km (auto-expande a 2 y 3 km si hay pocos resultados).
     </div>
     <div class="tiny" id="srcHint" style="margin-top:6px;"></div>
+    <div class="tiny" id="intentHint" style="margin-top:6px;display:none"></div>
   </div>
 
   <div id="results" class="box"></div>
@@ -119,10 +121,14 @@ function detectBarrio(qnorm){
   for(const b of BARRIOS){
     if(qnorm.includes(b)) return b;
   }
-  // forma "en X": tomar palabra después de "en"
   const m = qnorm.match(/\ben\s+([a-z0-9\s]{3,})$/);
   if(m){ return m[1].trim(); }
   return "";
+}
+function barrioMatch(dirbar, barrioTerm){
+  if(!barrioTerm) return true;
+  if(barrioTerm==="centro") return (dirbar.includes("centro") || dirbar.includes("microcentro"));
+  return dirbar.includes(barrioTerm);
 }
 
 // UI
@@ -131,6 +137,7 @@ document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('qall').value="";
   document.getElementById('results').innerHTML="";
   NEAR=false; document.getElementById('gpsHint').style.display='none';
+  document.getElementById('intentHint').style.display='none';
 });
 document.getElementById('qall').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); buscar(); } });
 document.getElementById('locBtn').addEventListener('click',()=>{
@@ -184,28 +191,25 @@ function buscar(){
     return render(nearSearch());
   }
 
-  let items = DATA.map((row,idx)=>({ row,idx,score:0 }));
-
-  // INTENCIÓN: "almorzar en <barrio>"
+  // INTENCIÓN ALMORZAR EN {BARRIO}
   const wantsLunch = /(almorzar|almuerzo|men[uú]|comida|restaurante|gastronom[íi]a)/i.test(rawQ);
-  const barrioQ = detectBarrio(qnorm); // e.g., 'recoleta'
-  if(wantsLunch){
-    items = items.map(o=>{
-      const M=IDX[o.idx]; let sc=o.score;
-      if(M.rubro.includes("gastronomia")) sc+=3;
-      if(/(almuerzo|menu|comida|restaurante)/.test(M.kw)) sc+=2;
-      if(barrioQ){
-        if(M.dirbar.includes(barrioQ)) sc+=4; else sc = -999; // filtro duro por barrio si se indicó
-      } else {
-        if(/(centro|microcentro)/.test(qnorm) && /(centro|microcentro)/.test(M.dirbar)) sc+=2;
-      }
-      return {...o,score:sc};
-    }).filter(o=>o.score>0);
+  const barrioQ = detectBarrio(qnorm);
+  if(wantsLunch && barrioQ){
+    const lunch = DATA.map((row,idx)=>({row,idx})).filter(o=>{
+      const M=IDX[o.idx];
+      const isGastro = (M.rubro.includes("gastronomia") || /(almuerzo|menu|comida|restaurante)/.test(M.kw));
+      return isGastro && barrioMatch(M.dirbar, barrioQ);
+    });
+    document.getElementById('intentHint').style.display='block';
+    document.getElementById('intentHint').innerHTML = '<span class="badge">Intención</span> almorzar · barrio: <strong>'+barrioQ+'</strong>';
+    return render(lunch.slice(0,40));
   }
 
+  // scoring general
+  let items = DATA.map((row,idx)=>({ row,idx,score:0 }));
   if(toks.length){
     items = items.map(o=>{
-      const M=IDX[o.idx]; let sc=o.score;
+      const M=IDX[o.idx]; let sc=0;
       toks.forEach(t=>{
         if(M.nombre.includes(t)) sc+=3;
         if(M.kw.includes(t)) sc+=2;
@@ -213,10 +217,8 @@ function buscar(){
         if(M.dirbar.includes(t)) sc+=1;
       });
       return {...o,score:sc};
-    }).filter(o=>o.score>0);
+    }).filter(o=>o.score>0).sort((a,b)=>b.score-a.score);
   }
-
-  items.sort((a,b)=>b.score-a.score);
 
   render(items.slice(0,40));
 }
