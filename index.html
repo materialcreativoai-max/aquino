@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — estable v4.9</title>
+<title>Aquí Nomás — estable v4.10</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -27,20 +27,19 @@ h1{font-size:20px;margin:0 0 14px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — estable v4.9</h1>
+  <h1>🏷️ Aquí Nomás — estable v4.10</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus placeholder="Ej: 'cerca', 'almorzar en recoleta', 'santa fe', 'librería en el centro'"/>
+      <input id="qall" class="input" autofocus placeholder="Ej: 'santa fe', 'cerca', 'almorzar en recoleta', 'librería en el centro'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
       <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
     </div>
     <div class="tiny" id="gpsHint" style="margin-top:6px;display:none"></div>
-    <div class="tiny" id="intentHint" style="margin-top:6px;display:none"></div>
   </div>
 
   <div id="results" class="box"></div>
@@ -49,13 +48,13 @@ h1{font-size:20px;margin:0 0 14px}
 <script>
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 
-// utils
+// ——— utils
 function removeDiacritics(str){return str.normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
 function aliasPhrases(s){
-  // colapsamos algunas calles compuestas para evitar tokens sueltos
   return s
     .replace(/\bsanta\s+fe\b/g,"santafe")
-    .replace(/\bsan\s+nicolas\b/g,"sannicolas");
+    .replace(/\bsan\s+nicolas\b/g,"sannicolas")
+    .replace(/\b9\s*de\s*julio\b/g,"9dejulio");
 }
 const normRaw = s => aliasPhrases(removeDiacritics(String(s||"").toLowerCase()));
 const norm = s => normRaw(s).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
@@ -84,7 +83,7 @@ function haversineKm(a,b){
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
 
-// load
+// ——— load
 let DATA=[],IDX=[],USER_POS=null,NEAR=false,LOADED=false;
 fetch(CSV_URL,{cache:"no-store"})
  .then(r=>r.text())
@@ -95,8 +94,7 @@ fetch(CSV_URL,{cache:"no-store"})
       const nombre=norm(row.nombre_local||row.nombre||row.local||"");
       const rubro=norm(row.rubro||"");
       const kw=norm((row.keywords||"")+" "+(row.nombre_local||row.nombre||"")+" "+(row.rubro||"")+" "+(row.barrio||""));
-      // importante: normalizamos dir+barrio con alias (santafe, etc.)
-      const dirbar=norm((row.direccion||"")+" "+(row.barrio||""));
+      const dirbar=norm((row.direccion||"")+" "+(row.barrio||"")); // incluye alias (santafe, etc.)
       const lat=parseCoord(row.lat),lng=parseCoord(row.lng);
       return{nombre,rubro,kw,dirbar,lat,lng};
     });
@@ -109,15 +107,14 @@ fetch(CSV_URL,{cache:"no-store"})
     el.textContent="No se pudo leer el CSV. "+(e.message||e);
  });
 
-// search helpers
+// ——— search helpers
 const STOP=new Set(["hola","buenas","busco","un","una","el","la","en","por","a","al","del","las","los"]);
 const BARRIOS=["microcentro","centro","recoleta","palermo","belgrano","caballito","flores","retiro","san nicolas","monserrat","balvanera","almagro","boedo","san telmo","barracas","constitucion","chacarita","villa crespo","colegiales","nunez","saavedra","parque patricios","parque chas"];
 
 function tokenize(raw){
-  const qn = norm(raw); // ya con alias (santafe)
+  const qn = norm(raw);
   let t=qn.split(/\s+/).filter(w=>!STOP.has(w));
-  // ignorar tokens de 1–2 letras (como "fe")
-  t=t.filter(w=>w.length>=3);
+  t=t.filter(w=>w.length>=3); // sin tokens de 1–2 letras (evita “fe”)
   const extra=[];
   if(t.includes("almorzar")||t.includes("almuerzo"))extra.push("almuerzo","menu","comida","gastronomia","restaurante");
   if(t.includes("centro"))extra.push("microcentro","centro");
@@ -134,7 +131,7 @@ function barrioMatch(dirbar,barrioTerm){
   return dirbar.includes(barrioTerm);
 }
 
-// UI wiring
+// ——— UI
 document.getElementById('goBtn').addEventListener('click',()=>buscar('text'));
 document.getElementById('clearBtn').addEventListener('click',()=>{
   document.getElementById('qall').value="";
@@ -153,7 +150,7 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   );
 });
 
-// mic
+// ——— mic
 (function(){
   const b=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -164,7 +161,7 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   rec.onend=()=>{b.innerText='🎤';};
 })();
 
-// NEAR logic — only valid coords inside radius
+// ——— NEAR (solo coords válidas + radio escalonado)
 function parseNearList(){
   const withDist = DATA.map((row,i)=>{
     const M=IDX[i];
@@ -184,6 +181,7 @@ function parseNearList(){
   return inside.slice(0,40);
 }
 
+// ——— buscar
 function buscar(source){
   if(!LOADED){alert("Esperá que cargue el CSV…");return;}
   const raw=document.getElementById('qall').value||"";
@@ -192,7 +190,7 @@ function buscar(source){
   const barrioQ=detectBarrio(qnorm);
   const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria","heladeria"].includes(t));
 
-  // reset de NEAR solo si la búsqueda viene por texto y NO dice 'cerca'
+  // reset NEAR solo si viene por texto y no dice 'cerca'
   if(source==='text' && !/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
 
   // activar “cerca” por texto
@@ -202,6 +200,13 @@ function buscar(source){
   if(NEAR && USER_POS){
     const arr=parseNearList();
     return render(arr.length?arr:[], arr.length?null:'No hay locales cercanos en el radio.');
+  }
+
+  // 🔒 calle compuesta “santafe” sin rubro/barrio → exigir match exacto en dirbar
+  if(qnorm.includes("santafe") && !rubroT && !barrioQ){
+    const arr=DATA.map((row,i)=>({row,i})).filter(o=>IDX[o.i].dirbar.includes("santafe"));
+    if(!arr.length) return render([],`No se encontraron resultados sobre Santa Fe.`);
+    return render(arr);
   }
 
   // rubro + barrio → si no hay match, mensaje
@@ -232,6 +237,7 @@ function buscar(source){
   render(arr.slice(0,40));
 }
 
+// ——— render
 function render(arr,msg){
   const box=document.getElementById('results');
   if(!arr.length){box.innerHTML=`<div class="tiny">${msg||'Sin resultados.'}</div>`;return;}
