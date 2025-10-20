@@ -65,7 +65,30 @@ function parseCSV(txt){
 }
 function csvURL(){return BASE_CSV+(BASE_CSV.includes("?")?"&":"?")+"v="+Date.now();}
 
-let DATA=[],IDX=[],LOADED=false;
+function parseCoord(v){
+  if(!v)return NaN;
+  let s=String(v).trim().replace(/,/g,'.');
+  let n=Number(s);
+  if(Number.isNaN(n)){
+    const d=s.replace(/[^0-9]/g,'');
+    if(d.length>=7){ n=parseInt(d,10)/1e6; if(/^[-]/.test(s)) n=-Math.abs(n); }
+  }
+  if(Math.abs(n)>180) n/=1e6;
+  return n;
+}
+function haversineKm(a,b){
+  const R=6371,toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
+  const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
+  const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
+}
+
+let DATA=[],IDX=[],USER_POS=null,NEAR=false,LOADED=false;
+const STREET_ANCHORS=['santafe','9dejulio','corrientes'];
+const STOP=new Set(['hola','buenas','busco','un','una','el','la','en','por','a','al','del','las','los']);
+const BARRIOS=['microcentro','centro','recoleta','palermo','belgrano','caballito','flores','retiro','san nicolas','monserrat','balvanera','almagro','boedo','san telmo','barracas','constitucion','chacarita','villa crespo','colegiales','nunez','saavedra','parque patricios','parque chas'];
+
 function loadCSV(){
   const st=document.getElementById("status");
   st.style.display="block";st.textContent="Cargando CSV…";
@@ -79,8 +102,9 @@ function loadCSV(){
       const rubro=norm(row.rubro||"");
       const kw=norm((row.keywords||"")+" "+(row.nombre_local||row.nombre||"")+" "+(row.rubro||"")+" "+(row.barrio||""));
       const dirbar=norm((row.direccion||"")+" "+(row.barrio||""));
+      const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
       const img=(row.imagen_url||"").trim();
-      return {nombre,rubro,kw,dirbar,img};
+      return {nombre,rubro,kw,dirbar,lat,lng,img};
     });
     st.textContent="CSV cargado OK · filas: "+DATA.length;
     LOADED=true;
@@ -90,45 +114,156 @@ function loadCSV(){
   });
 }
 
-document.getElementById("goBtn").addEventListener("click",buscar);
-document.getElementById("clearBtn").addEventListener("click",()=>{document.getElementById("qall").value="";document.getElementById("results").innerHTML="";});
-document.getElementById("refreshBtn").addEventListener("click",()=>{LOADED=false;loadCSV().then(()=>{if(document.getElementById("qall").value.trim())buscar();});});
+function tokenize(raw){
+  const qn=norm(raw);
+  let t=qn.split(/\s+/).filter(w=>!STOP.has(w));
+  t=t.filter(w=>w.length>=3);
+  const extra=[];
+  if(t.includes("almorzar")||t.includes("almuerzo")) extra.push("almuerzo","menu","comida","gastronomia","restaurante");
+  if(t.includes("centro")) extra.push("microcentro","centro");
+  return Array.from(new Set(t.concat(extra)));
+}
+function detectBarrio(q){
+  for(const b of BARRIOS){ if(q.includes(b)) return b; }
+  const m=q.match(/\ben\s+([a-z0-9\s]{3,})$/);
+  return m?m[1].trim():"";
+}
+function barrioMatch(dirbar,b){
+  if(!b) return true;
+  if(b==="centro") return dirbar.includes("centro")||dirbar.includes("microcentro");
+  return dirbar.includes(b);
+}
 
-function buscar(){
-  if(!LOADED){alert("Esperá que cargue el CSV…");return;}
-  const q=norm(document.getElementById("qall").value);
-  const arr=DATA.map((row,i)=>({row,i})).filter(o=>{
-    const M=IDX[o.i];
-    return M.nombre.includes(q)||M.rubro.includes(q)||M.kw.includes(q)||M.dirbar.includes(q);
-  });
-  render(arr);
+document.getElementById("goBtn").addEventListener("click",()=>buscar("text"));
+document.getElementById("clearBtn").addEventListener("click",()=>{
+  document.getElementById("qall").value="";
+  document.getElementById("results").innerHTML="";
+  document.getElementById("gpsHint").style.display="none";
+  NEAR=false;
+});
+document.getElementById("refreshBtn").addEventListener("click",()=>{
+  LOADED=false; loadCSV().then(()=>{ if(document.getElementById("qall").value.trim()) buscar("text"); });
+});
+document.getElementById("qall").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();buscar("text");}});
+document.getElementById("locBtn").addEventListener("click",()=>{
+  const go=()=>{ NEAR=true; buscar("nearbutton"); };
+  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; go(); return; }
+  navigator.geolocation.getCurrentPosition(
+    p=>{ USER_POS={lat:p.coords.latitude,lng:p.coords.longitude}; go(); },
+    ()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; go(); },
+    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
+  );
+});
+
+(function(){
+  const b=document.getElementById("micBtn");
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ b.disabled=true; b.innerText="🎤—"; return; }
+  const rec=new SR(); rec.lang="es-AR";
+  b.addEventListener("click",()=>{ try{rec.start(); b.innerText="⏺️";}catch(e){} });
+  rec.onresult=e=>{
+    const t=e.results[0][0].transcript||"";
+    document.getElementById("qall").value=aliasPhrases(removeDiacritics(t.toLowerCase()));
+    buscar("text");
+  };
+  rec.onend=()=>{ b.innerText="🎤"; };
+})();
+
+function parseNearList(){
+  const withDist = DATA.map((row,i)=>{
+    const M=IDX[i];
+    if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
+    const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
+    return {row:DATA[i],i,dist:d,idx:M};
+  }).filter(Boolean).sort((a,b)=>a.dist-b.dist);
+
+  let radius=1.5;
+  let inside=withDist.filter(o=>o.dist<=radius);
+  if(inside.length<3){ radius=2.0; inside=withDist.filter(o=>o.dist<=radius); }
+  if(inside.length<3){ radius=3.0; inside=withDist.filter(o=>o.dist<=radius); }
+
+  const gh=document.getElementById("gpsHint");
+  gh.style.display="block";
+  gh.textContent="📍 Cercanos dentro de "+radius.toFixed(1)+" km · "+inside.length+" resultados";
+  return inside.slice(0,40);
+}
+
+function buscar(source){
+  if(!LOADED){ alert("Esperá que cargue el CSV…"); return; }
+  const raw=document.getElementById("qall").value||"";
+  const qnorm=norm(raw);
+  const toks=tokenize(raw);
+  const barrioQ=detectBarrio(qnorm);
+  const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria","heladeria"].includes(t));
+
+  if(source==="text" && !/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
+  if(/\bcerca(s|nos)?\b/.test(qnorm)){ if(!USER_POS) USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; }
+
+  if(NEAR && USER_POS){
+    const arr=parseNearList();
+    return render(arr.length?arr:[], arr.length?null:"No hay locales cercanos en el radio.");
+  }
+
+  const anchor = STREET_ANCHORS.find(a=>qnorm.includes(a));
+  if(anchor && !rubroT && !barrioQ){
+    NEAR=false;
+    const arr = DATA.map((row,i)=>({row,i,idx:IDX[i]}))
+                    .filter(o=>o.idx.dirbar.includes(anchor));
+    return render(arr.length?arr:[], arr.length?null:"No se encontraron resultados sobre "+anchor.replace("9dejulio","9 de julio")+".");
+  }
+
+  if(rubroT && barrioQ){
+    const arr=DATA.map((row,i)=>({row,i,idx:IDX[i]}))
+                  .filter(o=>o.idx.rubro.includes(rubroT) && barrioMatch(o.idx.dirbar,barrioQ));
+    if(!arr.length) return render([],`No se encontraron resultados para ${rubroT} en ${barrioQ}.`);
+    return render(arr);
+  }
+
+  let arr=DATA.map((row,i)=>({row,i,idx:IDX[i],score:0}));
+  if(toks.length){
+    arr=arr.map(o=>{
+      const M=o.idx; let s=0;
+      toks.forEach(t=>{
+        if(M.nombre.includes(t))s+=3;
+        if(M.kw.includes(t))s+=2;
+        if(M.rubro.includes(t))s+=1;
+        if(M.dirbar.includes(t))s+=1;
+      });
+      return {...o,score:s};
+    }).filter(o=>o.score>0).sort((a,b)=>b.score-a.score);
+  }
+  if(!arr.length) return render([],`No se encontraron resultados para "${raw}".`);
+  render(arr.slice(0,40));
 }
 
 function safeImg(u){
   if(!u) return "";
   const s=String(u).trim();
   if(!/^https?:\/\//i.test(s)) return "";
-  return s+(s.includes("?")?"&":"?")+"t="+Date.now()%999999;
+  return s+(s.includes("?")?"&":"?")+"t="+(Date.now()%999999);
 }
-function render(arr){
+function render(arr,msg){
   const box=document.getElementById("results");
-  if(!arr.length){box.innerHTML='<div class="tiny">Sin resultados.</div>';return;}
+  if(!arr.length){ box.innerHTML=`<div class="tiny">${msg||'Sin resultados.'}</div>`; return; }
   box.innerHTML=arr.map(o=>{
-    const r=o.row;
+    const r=o.row; const idx=o.idx||{};
     const name=r.nombre_local||r.nombre||r.local||"(sin nombre)";
     const maps="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent((r.direccion||"")+" "+(r.barrio||""));
-    const imgURL=safeImg(r.imagen_url);
-    const imgTag=imgURL?`<img class="thumb" loading="lazy" src="${imgURL}" alt="${name}" onerror="this.style.display='none'">`:"";
+    const dist=(typeof o.dist==="number"&&isFinite(o.dist))?`<div class="meta">≈ ${(o.dist*10).toFixed(0)} cuadras</div>`:"";
+    const imgURL=safeImg(r.imagen_url || idx.img);
+    const imgTag = imgURL ? `<img class="thumb" loading="lazy" src="${imgURL}" alt="${name}" onerror="this.style.display='none'">` : "";
     return `<div class="card">
       ${imgTag}
       <div class="title">${name} — <span>${r.rubro||""}</span></div>
       <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
-      <div style="margin-top:8px;">
+      ${dist}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;justify-content:center">
         <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
       </div>
     </div>`;
   }).join("");
 }
+
 loadCSV();
 </script>
 </body>
