@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO (catálogo horizontal • mobile/desktop)</title>
+<title>Aquí Nomás — DEMO (catálogo final PC+Mobile)</title>
 <style>
 :root{--pri:#0b5cff;}
 *{box-sizing:border-box}
@@ -28,20 +28,13 @@ h1{font-size:20px;margin:0 0 14px}
   margin:10px 0;
   box-shadow:0 1px 4px rgba(0,0,0,.06);
 }
-.card-inner{
-  display:flex; align-items:center; gap:12px;
-}
-.media{
-  flex:0 0 80px; height:80px; display:flex; align-items:center; justify-content:center;
-}
+.card-inner{display:flex; align-items:center; gap:12px}
+.media{flex:0 0 80px; height:80px; display:flex; align-items:center; justify-content:center}
 .thumb-ico{
   max-width:80px; max-height:80px; width:auto; height:auto; object-fit:contain;
-  border-radius:10px; background:#eef1f6; display:block;
-  box-shadow:0 1px 3px rgba(0,0,0,.05)
+  border-radius:10px; background:#eef1f6; display:block; box-shadow:0 1px 3px rgba(0,0,0,.05)
 }
-.card-body{
-  flex:1; min-width:0; text-align:left;
-}
+.card-body{flex:1; min-width:0; text-align:left}
 .title{font-weight:700;margin:0 0 4px}
 .title span{font-weight:600;color:#555}
 .meta{font-size:12px;color:#566;margin-top:6px}
@@ -55,13 +48,14 @@ h1{font-size:20px;margin:0 0 14px}
   .card-body{font-size:14px; line-height:1.25}
   .actions .btn{padding:9px 12px}
 }
+
 .err{padding:8px 10px;background:#fff3f3;border:1px solid #ffd2d2;border-radius:10px;margin-bottom:12px;color:#7a1a1a}
 .ok{padding:8px 10px;background:#eef9f1;border:1px solid #cfead8;border-radius:10px;margin-bottom:12px;color:#145a32}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — DEMO (catálogo horizontal)</h1>
+  <h1>🏷️ Aquí Nomás — DEMO (catálogo)</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
@@ -294,12 +288,13 @@ function render(arr,msg){
     const maps="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent((r.direccion||"")+" "+(r.barrio||""));
     const dist=(typeof o.dist==="number"&&isFinite(o.dist))?`<div class="meta">≈ ${(o.dist*10).toFixed(0)} cuadras</div>`:"";
     const imgURL=safeImg(r.imagen_url || idx.img);
-    const imgTag = imgURL ? `<img class="thumb-ico" loading="lazy" src="${imgURL}" alt="${name}" onerror="this.style.display='none'">` : "";
+    const hasImg=!!imgURL;
+    const imgTag = hasImg ? `<div class="media"><img class="thumb-ico" loading="lazy" src="${imgURL}" alt="${name}" onerror="this.parentElement.style.display='none'"></div>` : "";
 
     return `<div class="card">
       <div class="card-inner">
-        ${imgTag ? `<div class="media">${imgTag}</div>` : `<div class="media"></div>`}
-        <div class="card-body">
+        ${imgTag}
+        <div class="card-body" style="${hasImg?'':'margin-left:4px'}">
           <div class="title">${name} — <span>${r.rubro||""}</span></div>
           <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
           ${dist}
