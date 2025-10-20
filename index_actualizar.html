@@ -28,7 +28,11 @@ h1{font-size:20px;margin:0 0 14px}
   margin:10px 0;
   box-shadow:0 1px 4px rgba(0,0,0,.06);
 }
-.card-inner{display:flex; align-items:center; gap:12px}
+.card-inner{
+  display:flex; align-items:center; gap:12px;
+  /* 👇 Limita ancho en desktop para que no se “estire” */
+  max-width:640px; margin:0 auto;
+}
 .media{flex:0 0 80px; height:80px; display:flex; align-items:center; justify-content:center}
 .thumb-ico{
   max-width:80px; max-height:80px; width:auto; height:auto; object-fit:contain;
@@ -42,6 +46,7 @@ h1{font-size:20px;margin:0 0 14px}
 
 /* Mobile tweaks */
 @media (max-width:560px){
+  .card-inner{max-width:100%} /* 👈 Vuelve a ancho completo en móvil */
   .media{flex-basis:56px; height:56px}
   .thumb-ico{max-width:56px; max-height:56px; border-radius:8px}
   .title{font-size:16px}
