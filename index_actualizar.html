@@ -34,10 +34,7 @@ h1{font-size:20px;margin:0 0 14px}
   max-width:80px; max-height:80px; width:auto; height:auto; object-fit:contain;
   border-radius:10px; background:#eef1f6; display:block; box-shadow:0 1px 3px rgba(0,0,0,.05)
 }
-.card-body{
-  flex:1; min-width:0; text-align:left;
-  max-width:480px; /* ancho de lectura desktop */
-}
+.card-body{flex:1; min-width:0; text-align:left; max-width:480px}
 .title{font-weight:700;margin:0 0 4px}
 .title span{font-weight:600;color:#555}
 .meta{font-size:12px;color:#566;margin-top:6px}
@@ -64,7 +61,7 @@ h1{font-size:20px;margin:0 0 14px}
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" placeholder="Ej: 'santa fe', 'cerca', 'almorzar en recoleta'"/>
+      <input id="qall" class="input" placeholder="Ej: 'santa fe', 'cerca', 'almorzar en recoleta', 'almorzar en gastronomix'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -98,14 +95,11 @@ const norm = s => aliasPhrases(removeDiacritics(String(s||"").toLowerCase()))
 /* Normalización especial MIC (corrige fonéticas típicas) */
 function micNormalize(q){
   let s = q;
-  // variantes que Chrome móvil suele devolver
-  s = s.replace(/\bgastronomics?\b/g,"gastronomix");
-  s = s.replace(/\bgastronomy\b/g,"gastronomix");
-  s = s.replace(/\bgastronomic\b/g,"gastronomix");
-  s = s.replace(/\bgastronomical\b/g,"gastronomix");
-  // por las dudas, doble x / espacios raros
-  s = s.replace(/\bgastronomixx+\b/g,"gastronomix");
-  s = s.replace(/\bgastro\s*nomix\b/g,"gastronomix");
+  s = s.replace(/\bgastronomics?\b/g,"gastronomix")
+       .replace(/\bgastronomy\b/g,"gastronomix")
+       .replace(/\bgastronomic(al)?\b/g,"gastronomix")
+       .replace(/\bgastro\s*nomix\b/g,"gastronomix")
+       .replace(/\bgastronomixx+\b/g,"gastronomix");
   return s;
 }
 
@@ -177,6 +171,10 @@ function tokenize(raw){
   const extra=[];
   if(t.includes("almorzar")||t.includes("almuerzo")) extra.push("almuerzo","menu","comida","gastronomia","restaurante");
   if(t.includes("centro")) extra.push("microcentro","centro");
+  // cierres → costurería
+  if(qn.includes("cierre")||qn.includes("cierres")){
+    extra.push("costureria","arreglo","cierres");
+  }
   return Array.from(new Set(t.concat(extra)));
 }
 function detectBarrio(q){
@@ -188,6 +186,20 @@ function barrioMatch(dirbar,b){
   if(!b) return true;
   if(b==="centro") return dirbar.includes("centro")||dirbar.includes("microcentro");
   return dirbar.includes(b);
+}
+/* Detecta “en <algo>” y decide si <algo> es barrio o nombre de local */
+function tailAfterEn(q){
+  const m=q.match(/\ben\s+([a-z0-9\s]{2,})$/);
+  return m?m[1].trim():"";
+}
+function matchLocalesByName(fragment){
+  if(!fragment) return [];
+  const frag=fragment.trim();
+  return DATA.map((row,i)=>({row,i,idx:IDX[i]}))
+             .filter(o=>{
+               const n=o.idx.nombre;
+               return n.includes(frag) || frag.includes(n);
+             });
 }
 
 /* UI */
@@ -221,7 +233,6 @@ document.getElementById("locBtn").addEventListener("click",()=>{
   b.addEventListener("click",()=>{ try{rec.start(); b.innerText="⏺️";}catch(e){} });
   rec.onresult=e=>{
     const raw=(e.results[0][0].transcript||"").toLowerCase();
-    // Normalización reforzada para dictado
     const micFixed = micNormalize(norm(raw));
     document.getElementById("qall").value = micFixed;
     buscar("text");
@@ -256,31 +267,59 @@ function buscar(source){
   const qnorm=norm(raw);
   const toks=tokenize(raw);
   const barrioQ=detectBarrio(qnorm);
+  const afterEn = tailAfterEn(qnorm);
   const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria","heladeria"].includes(t));
 
   if(source==="text" && !/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
   if(/\bcerca(s|nos)?\b/.test(qnorm)){ if(!USER_POS) USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; }
 
+  /* 1) Modo NEAR */
   if(NEAR && USER_POS){
     const arr=parseNearList();
     return render(arr.length?arr:[], arr.length?null:"No hay locales cercanos en el radio.");
   }
 
+  /* 2) Si “en <algo>” coincide con NOMBRE DE LOCAL → priorizar ese/ese(s) */
+  if(afterEn){
+    const byName = matchLocalesByName(afterEn);
+    if(byName.length){
+      // si además hay intención (almorzar/cierres/libros, etc.), no filtramos duro: ya priorizamos por nombre
+      return render(byName);
+    }
+    // si no matcheó nombre, caeremos más abajo a barrio u otras reglas
+  }
+
+  /* 3) Anclajes de calles (cuando no hay rubro ni barrio) */
   const anchor = STREET_ANCHORS.find(a=>qnorm.includes(a));
   if(anchor && !rubroT && !barrioQ){
-    NEAR=false;
     const arr = DATA.map((row,i)=>({row,i,idx:IDX[i]}))
                     .filter(o=>o.idx.dirbar.includes(anchor));
     return render(arr.length?arr:[], arr.length?null:"No se encontraron resultados sobre "+anchor.replace("9dejulio","9 de julio")+".");
   }
 
-  if(rubroT && barrioQ){
+  /* 4) Rubro + barrio (ej: “almorzar en el centro”, “arreglo de cierres en el centro”) */
+  if((rubroT||toks.length) && (barrioQ || /(^|\s)centro(\s|$)/.test(qnorm))){
+    const barrioTarget = barrioQ || "centro";
     const arr=DATA.map((row,i)=>({row,i,idx:IDX[i]}))
-                  .filter(o=>o.idx.rubro.includes(rubroT) && barrioMatch(o.idx.dirbar,barrioQ));
-    if(!arr.length) return render([],`No se encontraron resultados para ${rubroT} en ${barrioQ}.`);
-    return render(arr);
+                  .filter(o=>barrioMatch(o.idx.dirbar,barrioTarget))
+                  .map(o=>{
+                    let s=0;
+                    const M=o.idx;
+                    toks.forEach(t=>{
+                      if(M.nombre.includes(t))s+=3;
+                      if(M.kw.includes(t))s+=2;
+                      if(M.rubro.includes(t))s+=1;
+                    });
+                    return {...o,score:s};
+                  })
+                  .filter(o=>o.score>0)
+                  .sort((a,b)=>b.score-a.score);
+    if(arr.length) return render(arr);
+    // si no hubo score, mostramos vacío claro
+    return render([],`No se encontraron resultados en ${barrioTarget}.`);
   }
 
+  /* 5) Búsqueda general con scoring */
   let arr=DATA.map((row,i)=>({row,i,idx:IDX[i],score:0}));
   if(toks.length){
     arr=arr.map(o=>{
