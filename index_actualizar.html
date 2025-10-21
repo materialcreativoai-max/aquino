@@ -61,7 +61,7 @@ h1{font-size:20px;margin:0 0 14px}
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" placeholder="Ej: 'santa fe', 'cerca', 'almorzar en recoleta', 'almorzar en gastronomix'"/>
+      <input id="qall" class="input" placeholder="Ej: 'almorzar en gastronomix', 'arreglo de cierres en el centro'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -163,20 +163,18 @@ function loadCSV(){
   });
 }
 
-/* Búsqueda */
-function tokenize(raw){
-  const qn=norm(raw);
-  let t=qn.split(/\s+/).filter(w=>!STOP.has(w));
-  t=t.filter(w=>w.length>=3);
-  const extra=[];
-  if(t.includes("almorzar")||t.includes("almuerzo")) extra.push("almuerzo","menu","comida","gastronomia","restaurante");
-  if(t.includes("centro")) extra.push("microcentro","centro");
-  // cierres → costurería
-  if(qn.includes("cierre")||qn.includes("cierres")){
-    extra.push("costureria","arreglo","cierres");
-  }
-  return Array.from(new Set(t.concat(extra)));
+/* Intent aliases (acciones → señales) */
+function intentHints(qn){
+  const hints=[];
+  if(/\balmorz(ar|o|o?s)\b|\bcom(er|o)\b|\bmenu\b/.test(qn)) hints.push('gastronomia','almuerzo','comida');
+  if(/\bhelad(o|a|os|as)\b|\bhelader(i[ao]|ia)\b/.test(qn)) hints.push('heladeria','helado');
+  if(/\bcaf(e|ecito)\b/.test(qn)) hints.push('cafe');
+  if(/\blibr(o|os|eria)\b/.test(qn)) hints.push('libreria','libros');
+  if(/\bcierre(s)?\b|\barreglo(s)?\s+de\s+cierre(s)?\b/.test(qn)) hints.push('costureria','arreglo','cierres');
+  return Array.from(new Set(hints));
 }
+
+/* Helpers nombre/barrio */
 function detectBarrio(q){
   for(const b of BARRIOS){ if(q.includes(b)) return b; }
   const m=q.match(/\ben\s+([a-z0-9\s]{3,})$/);
@@ -187,7 +185,6 @@ function barrioMatch(dirbar,b){
   if(b==="centro") return dirbar.includes("centro")||dirbar.includes("microcentro");
   return dirbar.includes(b);
 }
-/* Detecta “en <algo>” y decide si <algo> es barrio o nombre de local */
 function tailAfterEn(q){
   const m=q.match(/\ben\s+([a-z0-9\s]{2,})$/);
   return m?m[1].trim():"";
@@ -195,10 +192,14 @@ function tailAfterEn(q){
 function matchLocalesByName(fragment){
   if(!fragment) return [];
   const frag=fragment.trim();
+  // Coincidencia flexible: incluye/incluye y por tokens
+  const fTok=frag.split(/\s+/).filter(Boolean);
   return DATA.map((row,i)=>({row,i,idx:IDX[i]}))
              .filter(o=>{
                const n=o.idx.nombre;
-               return n.includes(frag) || frag.includes(n);
+               if(n.includes(frag) || frag.includes(n)) return true;
+               const nTok=n.split(/\s+/);
+               return fTok.every(t=>nTok.some(nt=>nt.includes(t)));
              });
 }
 
@@ -265,7 +266,11 @@ function buscar(source){
   if(!LOADED){ alert("Esperá que cargue el CSV…"); return; }
   const raw=document.getElementById("qall").value||"";
   const qnorm=norm(raw);
-  const toks=tokenize(raw);
+
+  // tokens base + hints por intención
+  const baseToks=qnorm.split(/\s+/).filter(w=>w && w.length>=3 && !['hola','buenas','busco','un','una','el','la','en','por','a','al','del','las','los'].includes(w));
+  const toks=Array.from(new Set(baseToks.concat(intentHints(qnorm))));
+
   const barrioQ=detectBarrio(qnorm);
   const afterEn = tailAfterEn(qnorm);
   const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria","heladeria"].includes(t));
@@ -279,17 +284,16 @@ function buscar(source){
     return render(arr.length?arr:[], arr.length?null:"No hay locales cercanos en el radio.");
   }
 
-  /* 2) Si “en <algo>” coincide con NOMBRE DE LOCAL → priorizar ese/ese(s) */
+  /* 2) Si “en <algo>” coincide con NOMBRE DE LOCAL → devolver esos primero (y solos) */
   if(afterEn){
     const byName = matchLocalesByName(afterEn);
     if(byName.length){
-      // si además hay intención (almorzar/cierres/libros, etc.), no filtramos duro: ya priorizamos por nombre
       return render(byName);
     }
-    // si no matcheó nombre, caeremos más abajo a barrio u otras reglas
   }
 
-  /* 3) Anclajes de calles (cuando no hay rubro ni barrio) */
+  /* 3) Anclajes de calles cuando no hay rubro ni barrio explícito */
+  const STREET_ANCHORS=['santafe','9dejulio','corrientes'];
   const anchor = STREET_ANCHORS.find(a=>qnorm.includes(a));
   if(anchor && !rubroT && !barrioQ){
     const arr = DATA.map((row,i)=>({row,i,idx:IDX[i]}))
@@ -297,14 +301,13 @@ function buscar(source){
     return render(arr.length?arr:[], arr.length?null:"No se encontraron resultados sobre "+anchor.replace("9dejulio","9 de julio")+".");
   }
 
-  /* 4) Rubro + barrio (ej: “almorzar en el centro”, “arreglo de cierres en el centro”) */
+  /* 4) Rubro/intent + barrio (ej: “almorzar en el centro”) */
   if((rubroT||toks.length) && (barrioQ || /(^|\s)centro(\s|$)/.test(qnorm))){
     const barrioTarget = barrioQ || "centro";
     const arr=DATA.map((row,i)=>({row,i,idx:IDX[i]}))
                   .filter(o=>barrioMatch(o.idx.dirbar,barrioTarget))
                   .map(o=>{
-                    let s=0;
-                    const M=o.idx;
+                    let s=0; const M=o.idx;
                     toks.forEach(t=>{
                       if(M.nombre.includes(t))s+=3;
                       if(M.kw.includes(t))s+=2;
@@ -315,7 +318,6 @@ function buscar(source){
                   .filter(o=>o.score>0)
                   .sort((a,b)=>b.score-a.score);
     if(arr.length) return render(arr);
-    // si no hubo score, mostramos vacío claro
     return render([],`No se encontraron resultados en ${barrioTarget}.`);
   }
 
