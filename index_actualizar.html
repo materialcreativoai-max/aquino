@@ -28,10 +28,7 @@ h1{font-size:20px;margin:0 0 14px}
   margin:10px 0;
   box-shadow:0 1px 4px rgba(0,0,0,.06);
 }
-.card-inner{
-  display:flex; align-items:center; gap:12px;
-  width:100%; /* ancho completo de tarjeta */
-}
+.card-inner{display:flex; align-items:center; gap:12px; width:100%;}
 .media{flex:0 0 80px; height:80px; display:flex; align-items:center; justify-content:center}
 .thumb-ico{
   max-width:80px; max-height:80px; width:auto; height:auto; object-fit:contain;
@@ -39,19 +36,19 @@ h1{font-size:20px;margin:0 0 14px}
 }
 .card-body{
   flex:1; min-width:0; text-align:left;
-  max-width:480px; /* ancho de lectura en desktop, alineado a la izquierda */
+  max-width:480px; /* ancho de lectura desktop */
 }
 .title{font-weight:700;margin:0 0 4px}
 .title span{font-weight:600;color:#555}
 .meta{font-size:12px;color:#566;margin-top:6px}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;justify-content:flex-start}
 
-/* Mobile tweaks */
+/* Mobile */
 @media (max-width:560px){
   .media{flex-basis:56px; height:56px}
   .thumb-ico{max-width:56px; max-height:56px; border-radius:8px}
   .title{font-size:16px}
-  .card-body{font-size:14px; line-height:1.25; max-width:100%} /* fluye en móvil */
+  .card-body{font-size:14px; line-height:1.25; max-width:100%}
   .actions .btn{padding:9px 12px}
 }
 
@@ -86,10 +83,31 @@ const CSV_PARAM=qs('csv');
 const CSV_FALLBACK="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 const BASE_CSV=CSV_PARAM||CSV_FALLBACK;
 
-/* Normalización */
+/* Normalización general */
 function removeDiacritics(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
-function aliasPhrases(s){return s.replace(/\bsanta\s+fe\b/g,"santafe").replace(/\b9\s*de\s*julio\b/g,"9dejulio");}
-const norm=s=>aliasPhrases(removeDiacritics(String(s||"").toLowerCase())).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+function aliasPhrases(s){
+  return s
+    .replace(/\bsanta\s+fe\b/g,"santafe")
+    .replace(/\b9\s*de\s*julio\b/g,"9dejulio")
+    .replace(/\bnueva?\s+de\s+julio\b/g,"9dejulio")
+    .replace(/\bnueve\s+de\s+julio\b/g,"9dejulio");
+}
+const norm = s => aliasPhrases(removeDiacritics(String(s||"").toLowerCase()))
+  .replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+
+/* Normalización especial MIC (corrige fonéticas típicas) */
+function micNormalize(q){
+  let s = q;
+  // variantes que Chrome móvil suele devolver
+  s = s.replace(/\bgastronomics?\b/g,"gastronomix");
+  s = s.replace(/\bgastronomy\b/g,"gastronomix");
+  s = s.replace(/\bgastronomic\b/g,"gastronomix");
+  s = s.replace(/\bgastronomical\b/g,"gastronomix");
+  // por las dudas, doble x / espacios raros
+  s = s.replace(/\bgastronomixx+\b/g,"gastronomix");
+  s = s.replace(/\bgastro\s*nomix\b/g,"gastronomix");
+  return s;
+}
 
 /* CSV */
 function parseCSV(txt){
@@ -99,7 +117,7 @@ function parseCSV(txt){
 }
 function csvURL(){return BASE_CSV+(BASE_CSV.includes("?")?"&":"?")+"v="+Date.now();}
 
-/* Geo base */
+/* Geo */
 function parseCoord(v){
   if(!v)return NaN;
   let s=String(v).trim().replace(/,/g,'.');
@@ -202,8 +220,10 @@ document.getElementById("locBtn").addEventListener("click",()=>{
   const rec=new SR(); rec.lang="es-AR";
   b.addEventListener("click",()=>{ try{rec.start(); b.innerText="⏺️";}catch(e){} });
   rec.onresult=e=>{
-    const t=e.results[0][0].transcript||"";
-    document.getElementById("qall").value=aliasPhrases(removeDiacritics(t.toLowerCase()));
+    const raw=(e.results[0][0].transcript||"").toLowerCase();
+    // Normalización reforzada para dictado
+    const micFixed = micNormalize(norm(raw));
+    document.getElementById("qall").value = micFixed;
     buscar("text");
   };
   rec.onend=()=>{ b.innerText="🎤"; };
