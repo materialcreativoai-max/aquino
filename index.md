@@ -19,3 +19,4 @@ Este índice junta **solo texto y enlaces**. Sin imágenes pesadas.
 3. Podés crear más páginas copiando uno de estos `.md` y agregando el link acá.
 
 > Sugerencia: si tenés notas largas, dividilas por secciones con `##` para navegar mejor.
+- [Abrir la app](aplicacion.html)
