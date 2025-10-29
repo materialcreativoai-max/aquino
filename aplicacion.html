@@ -1,43 +1,41 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Aquí Nomás — versión corregida</title>
 
-  <!-- Favicon inline (sin archivo externo) -->
+  <!-- Favicon inline -->
   <link rel="icon"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Ctext x='50%25' y='58%25' font-size='36' text-anchor='middle' fill='%23fff'%3EA%3C/text%3E%3C/svg%3E'">
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Ctext x='50%25' y='58%25' font-size='36' text-anchor='middle' fill='%23fff'%3EA%3C/text%3E%3C/svg%3E'"/>
 
-  <!-- Limpieza automática de almacenamiento (previene ResourceQuotaExceeded) -->
+  <!-- Limpieza de almacenamiento -->
   <script>
-    try { localStorage.clear(); } catch (e) {}
-    try { sessionStorage.clear(); } catch (e) {}
-    if ('caches' in window) {
+    try { localStorage.clear(); } catch {}
+    try { sessionStorage.clear(); } catch {}
+    if ("caches" in window) {
       caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(()=>{});
     }
-    if ('serviceWorker' in navigator) {
+    if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(()=>{});
     }
   </script>
 
-  <!-- Estilos mínimos -->
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
-    h1 { color: #333; text-align: center; }
-    .contenedor { max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    input, button { padding: 10px; margin: 5px 0; width: 100%; border: 1px solid #ccc; border-radius: 5px; }
-    button { background: #007bff; color: #fff; border: none; cursor: pointer; }
-    button:hover { background: #0056b3; }
-    #map { margin-top: 20px; height: 400px; background: #e0e0e0; display: flex; align-items: center; justify-content: center; border-radius: 5px; }
+    body { font-family: Arial, sans-serif; background:#f5f5f5; margin:0; padding:20px; }
+    h1 { text-align:center; color:#333; }
+    .contenedor { max-width:600px; margin:auto; background:#fff; border-radius:8px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1); }
+    input,button { width:100%; padding:10px; margin-top:8px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px; }
+    button { background:#007bff; color:#fff; border:none; cursor:pointer; }
+    button:hover { background:#0056b3; }
+    #map { margin-top:20px; height:400px; background:#e0e0e0; display:flex; align-items:center; justify-content:center; border-radius:5px; }
   </style>
 </head>
-
 <body>
   <div class="contenedor">
     <h1>📍 Aquí Nomás — versión corregida</h1>
     <p>Buscá un lugar cercano:</p>
-    <input id="busqueda" type="text" placeholder="Ej: 'almorzar en Recoleta', 'ferretería', 'heladería'">
+    <input id="busqueda" type="text" placeholder="Ej: 'almorzar en Recoleta', 'ferretería', 'heladería'" />
     <button onclick="buscar()">Buscar</button>
     <button onclick="limpiar()">Limpiar</button>
     <div id="map">🗺️ Cargando mapa...</div>
@@ -49,7 +47,6 @@
       if (!q) return alert("Ingresá una búsqueda.");
       alert("Simulación de búsqueda: " + q);
     }
-
     function limpiar() {
       document.getElementById("busqueda").value = "";
       alert("Búsqueda limpiada.");
