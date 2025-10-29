@@ -1,110 +1,59 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Launcher — back/ (3 partes)</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aquí Nomás — versión corregida</title>
+
+  <!-- Favicon inline (sin archivo externo) -->
+  <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Ctext x='50%25' y='58%25' font-size='36' text-anchor='middle' fill='%23fff'%3EA%3C/text%3E%3C/svg%3E'">
+
+  <!-- Limpieza automática de almacenamiento (previene ResourceQuotaExceeded) -->
+  <script>
+    try { localStorage.clear(); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
+    if ('caches' in window) {
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(()=>{});
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(()=>{});
+    }
+  </script>
+
+  <!-- Estilos mínimos -->
   <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html,body{height:100%}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;line-height:1.4;background:#0b0c10;color:#e8e9ed}
-    .wrap{display:grid;grid-template-columns:280px 1fr;grid-template-rows:auto 1fr;min-height:100vh}
-    header{grid-column:1/-1;display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-bottom:1px solid #1b1d24;background:#0f1116}
-    .brand{font-weight:600}
-    aside{border-right:1px solid #1b1d24;background:#0f1116;padding:.75rem;display:flex;flex-direction:column;gap:.5rem}
-    .sec{font-size:.85rem;color:#a3a7b0}
-    .nav{display:flex;flex-direction:column;gap:.35rem;margin-top:.25rem}
-    .btn{display:flex;justify-content:space-between;align-items:center;padding:.55rem .6rem;border:1px solid #1b1d24;border-radius:.6rem;background:#12141b;cursor:pointer}
-    .btn:hover{transform:translateY(-1px)}
-    .btn small{color:#9aa0aa}
-    main{position:relative}
-    iframe{width:100%;height:calc(100vh - 56px);border:0;background:#0b0c10}
-    .hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0aa;padding:1rem;text-align:center}
-    .footer{padding:.5rem 1rem;font-size:.8rem;color:#9aa0aa;border-top:1px solid #1b1d24;background:#0f1116}
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+    h1 { color: #333; text-align: center; }
+    .contenedor { max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    input, button { padding: 10px; margin: 5px 0; width: 100%; border: 1px solid #ccc; border-radius: 5px; }
+    button { background: #007bff; color: #fff; border: none; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    #map { margin-top: 20px; height: 400px; background: #e0e0e0; display: flex; align-items: center; justify-content: center; border-radius: 5px; }
   </style>
 </head>
+
 <body>
-  <div class="wrap">
-    <header>
-      <div class="brand">Launcher — carpeta back (3 partes)</div>
-      <div style="margin-left:auto" id="status">Sin carga</div>
-    </header>
-
-    <aside>
-      <div class="sec">Tus archivos</div>
-      <nav class="nav">
-        <button class="btn" data-href="./back/Galerias y Servicios varios-ideas comerciales con ia.html"><span>1. Galerias y Servicios varios-ideas comerciales con ia.html</span><small>./back/</small></button>
-<button class="btn" data-href="./back/Galerias y Servicios 2(cont)-Resumen optimizacion aqui nomas.html"><span>2. Galerias y Servicios 2(cont)-Resumen optimizacion aqui nomas.html</span><small>./back/</small></button>
-<button class="btn" data-href="./back/Galerias y Servicios 3(continuacion)-Resumen rapido proyecto.html"><span>3. Galerias y Servicios 3(continuacion)-Resumen rapido proyecto.html</span><small>./back/</small></button>
-      </nav>
-      <div class="sec" style="margin-top:.75rem">Atajos</div>
-      <div class="nav">
-        <div class="btn" data-action="go" data-idx="0"><span>Cargar Parte 1</span><small>1</small></div>
-        <div class="btn" data-action="go" data-idx="1"><span>Cargar Parte 2</span><small>2</small></div>
-        <div class="btn" data-action="go" data-idx="2"><span>Cargar Parte 3</span><small>3</small></div>
-        <div class="btn" data-action="clear"><span>Descargar iframe</span><small>Esc</small></div>
-      </div>
-    </aside>
-
-    <main>
-      <div class="hint" id="hint">Elegí una parte. El archivo se abre dentro del iframe. Asegurate de que la carpeta “back” esté al lado de este launcher.</div>
-      <iframe id="view" title="Vista"></iframe>
-      <div class="footer">Importante: no renombres las carpetas “back/…”. El launcher usa rutas relativas y maneja espacios y paréntesis automáticamente.</div>
-    </main>
+  <div class="contenedor">
+    <h1>📍 Aquí Nomás — versión corregida</h1>
+    <p>Buscá un lugar cercano:</p>
+    <input id="busqueda" type="text" placeholder="Ej: 'almorzar en Recoleta', 'ferretería', 'heladería'">
+    <button onclick="buscar()">Buscar</button>
+    <button onclick="limpiar()">Limpiar</button>
+    <div id="map">🗺️ Cargando mapa...</div>
   </div>
-<!-- FAVICON (evita el 404 de /favicon.ico en la mayoría de navegadores) -->
-<link rel="icon" type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Ctext x='50%25' y='58%25' font-size='36' text-anchor='middle' fill='%23fff'%3EA%3C/text%3E%3C/svg%3E">
-<link rel="shortcut icon" href="data:image/x-icon;,">
-
-<!-- LIMPIEZA DE ALMACENAMIENTO (debe correr ANTES que cualquier otro script) -->
-<script>
-try{ localStorage.clear(); }catch(e){}
-try{ sessionStorage.clear(); }catch(e){}
-if('caches' in window){
-  caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(()=>{});
-}
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations()
-    .then(rs => rs.forEach(r => r.unregister()))
-    .catch(()=>{});
-}
-</script>
 
   <script>
-    (function(){
-      const iframe = document.getElementById('view');
-      const hint = document.getElementById('hint');
-      const status = document.getElementById('status');
+    function buscar() {
+      const q = document.getElementById("busqueda").value.trim();
+      if (!q) return alert("Ingresá una búsqueda.");
+      alert("Simulación de búsqueda: " + q);
+    }
 
-      function load(href){ 
-        hint.style.display='none'; 
-        status.textContent='Cargando…';
-        // Manejar espacios y paréntesis con encodeURI
-        iframe.src = encodeURI(href);
-        iframe.addEventListener('load', ()=>{ status.textContent='Listo'; }, { once:true });
-      }
-
-      document.querySelectorAll('button.btn').forEach(b=>{ 
-        b.addEventListener('click', ()=> load(b.getAttribute('data-href'))); 
-      });
-      document.querySelectorAll('.btn[data-action="go"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const idx = parseInt(btn.getAttribute('data-idx'),10);
-          const targets = ['Galerias y Servicios varios-ideas comerciales con ia.html', 'Galerias y Servicios 2(cont)-Resumen optimizacion aqui nomas.html', 'Galerias y Servicios 3(continuacion)-Resumen rapido proyecto.html'];
-          const href = './back/' + targets[idx];
-          load(href);
-        });
-      });
-
-      window.addEventListener('keydown', (e)=>{
-        if(e.key==='1') document.querySelector('.btn[data-action="go"][data-idx="0"]').click();
-        if(e.key==='2') document.querySelector('.btn[data-action="go"][data-idx="1"]').click();
-        if(e.key==='3') document.querySelector('.btn[data-action="go"][data-idx="2"]').click();
-        if(e.key==='Escape'){ iframe.removeAttribute('src'); hint.style.display='flex'; status.textContent='Sin carga'; }
-      });
-    })();
+    function limpiar() {
+      document.getElementById("busqueda").value = "";
+      alert("Búsqueda limpiada.");
+    }
   </script>
 </body>
 </html>
-<!-- actualización -->
