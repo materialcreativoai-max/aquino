@@ -1,5 +1,5 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aquino — Hub</title><style>
+<title>Abrir App</title><style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,'Noto Sans';background:#0b0d10;color:#e6e9ee}
@@ -16,11 +16,27 @@ a:hover{text-decoration:underline}
 .btn:hover{background:#0d1218;border-color:#3a475c}
 .footer{margin-top:36px;color:#9aa3b2;font-size:13px}
 .badge{font-size:12px;color:#9aa3b2;border:1px solid #2a3342;border-radius:999px;padding:4px 8px}
-</style><body><div class="container">
-<div class="header"><div class="h-title">Aquino — Hub</div><span class="badge">Proyecto Galerías y Servicios</span></div>
-<div class="grid">
-  <div class="card"><h3>Abrir App</h3><p>Versión estable de la aplicación (sin cambios).</p><a class="btn" href="./app-proxy.html">Abrir App</a></div>
-  <div class="card"><h3>Abrir Website</h3><p>Resumen en texto y links de todo el proyecto.</p><a class="btn" href="./partes/">Abrir Website</a></div>
-</div>
-<div class="footer">Este Hub vive en /docs. La App sigue en la raíz o en /app.</div>
-</div></body></html>
+</style><body>
+<div class="container"><div class="header"><div class="h-title">Abriendo App…</div><a class="btn" href="./">Volver</a></div>
+<div class="card"><p>Detectando archivo de aplicación disponible…</p><p id="status" style="color:#c6ccd8">Probando nombres comunes…</p></div></div>
+<script>
+(async () => {
+  const candidates = [
+    '../aplicacion.html',
+    '../app.html',
+    '../index_app.html',
+    '../app/index.html',
+    '../app/aplicacion.html',
+    '../app/app.html'
+  ];
+  for (const url of candidates) {
+    try {
+      const r = await fetch(url, { method: 'HEAD', cache:'no-store' });
+      if (r.ok) return location.replace(url);
+    } catch(e) { /* ignore and continue */ }
+    document.getElementById('status').textContent = 'Falló: ' + url + ' — probando el siguiente…';
+  }
+  document.getElementById('status').innerHTML = 'No pude encontrar la App automáticamente.<br>Dejame el nombre exacto del archivo y te lo ajusto en segundos.';
+})();
+</script>
+</body></html>
