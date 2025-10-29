@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Aquino — Inicio</title>
+  <style>
+    :root {{ color-scheme: dark; }}
+    body {{ margin:0; min-height:100dvh; display:grid; place-items:center;
+           font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+           background:#0b0b0f; color:#e6e6eb; }}
+    .card {{ width:min(780px,92vw); border:1px solid #2a2a35; border-radius:16px;
+            padding:28px 24px; background:#121219; box-shadow:0 10px 30px rgba(0,0,0,.35); }}
+    h1 {{ margin:0 0 8px; font-size:26px }}
+    p  {{ margin:0 0 20px; color:#a8a8b5 }}
+    .row {{ display:flex; gap:12px; flex-wrap:wrap }}
+    a.btn {{ flex:1 1 220px; display:inline-block; text-align:center; padding:14px 18px;
+            border-radius:12px; text-decoration:none; background:#1f1f2b; color:#e6e6eb;
+            border:1px solid #2a2a35; transition:transform .05s ease, background .15s ease; }}
+    a.btn:hover {{ background:#2a2a38; transform:translateY(-1px) }}
+    small {{ display:block; margin-top:14px; color:#8f8fa0 }}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Proyecto Aquino</h1>
+    <p>Elegí una opción para continuar.</p>
+    <div class="row">
+      <a class="btn" href="./app/">Abrir App</a>
+      <a class="btn" href="./website/">Abrir Website</a>
+    </div>
+    <small>Privado: no indexar (robots noindex, nofollow)</small>
+  </main>
+</body>
+</html>
