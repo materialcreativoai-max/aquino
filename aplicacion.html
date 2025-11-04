@@ -3,53 +3,64 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Galerías y Servicios — Aquí Nomás</title>
+<title>Aquí Nomás — DEMO (catálogo)</title>
 <style>
 :root{--azul:#0b5cff;}
 body{margin:0;background:#121418;color:#e6e9ee;
 font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center}
-header{background:#121418;padding:16px 0;border-bottom:1px solid #1f232b;}
-a.logo{color:var(--azul);text-decoration:none;font-weight:600;font-size:18px;}
-.wrap{padding:30px}
-input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;
-border-radius:8px;background:#1b1f26;color:#e6e9ee}
-button{padding:10px 14px;margin:4px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
-.btn{background:var(--azul);color:#fff}
-.btn.alt{background:#1b1f26;color:#fff}
-.btn.ghost{background:#1b1f26;color:#e6e9ee;border:1px solid #1f232b}
-.card{border:1px solid #1f232b;background:#20242b;border-radius:10px;
-padding:12px;margin:10px auto;max-width:700px;text-align:left}
+.wrap{max-width:900px;margin:0 auto;padding:18px}
+h1{font-size:20px;margin:0 0 14px;color:var(--azul)}
+.box{background:#1b1f26;border:1px solid #1f232b;border-radius:14px;padding:14px;margin:0 0 14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
+.input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #1f232b;border-radius:12px;font-size:15px;background:#121418;color:#e6e9ee}
+.btn{padding:10px 12px;border-radius:12px;border:1px solid var(--azul);background:var(--azul);color:#fff;font-weight:600;cursor:pointer}
+.btn.secondary{background:#1b1f26;color:#fff}
+.btn.ghost{background:#1b1f26;border:1px solid #1f232b;color:#e6e9ee}
+.card{background:#1b1f26;border:1px solid #1f232b;border-radius:14px;padding:12px;margin:10px 0;text-align:left}
 .card b{color:var(--azul)}
-.card img{max-width:100%;max-height:100px;border-radius:8px;display:block;margin-top:8px;object-fit:cover}
+.card img{max-width:100%;max-height:100px;border-radius:10px;margin-top:8px;object-fit:cover}
 footer{margin-top:30px;font-size:13px;color:#8b94a1}
 </style>
 </head>
 <body>
-<header><a href="index.html" class="logo">Galerías y Servicios</a></header>
 <div class="wrap">
-<h2>Abriendo app…</h2>
-<input id="qall" placeholder="Buscar o decir un comercio…">
-<div>
-  <button id="micBtn" class="btn">🎤 Voz</button>
-  <button id="nearBtn" class="btn alt">📍 Cerca</button>
-  <button id="clearBtn" class="btn ghost">Limpiar</button>
-  <button id="refreshBtn" class="btn alt">Actualizar</button>
+<h1>🏷️ Aquí Nomás — DEMO (catálogo)</h1>
+<div class="box">
+  <div class="row">
+    <input id="qall" class="input" placeholder="Ej: 'almorzar en gastronomix', 'arreglo de cierres en el centro'"/>
+    <button id="micBtn" class="btn">🎤 Voz</button>
+    <button id="goBtn" class="btn secondary">Buscar</button>
+    <button id="clearBtn" class="btn ghost">Limpiar</button>
+    <button id="nearBtn" class="btn secondary">📍 Cerca</button>
+    <button id="refreshBtn" class="btn ghost">Actualizar</button>
+  </div>
 </div>
-<div id="results"></div>
-</div>
+<div id="results" class="box"></div>
 <footer>Datos actualizados en tiempo real desde Google Sheets</footer>
+</div>
 
 <script>
 const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 let DATA=[],POS=null;
 
-function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();}
-function distKm(a,b){const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
- return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLon/2)**2));}
-
 function parseCSV(txt){
-  const r=txt.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
-  const h=r.shift().map(x=>x.toLowerCase());return r.map(v=>Object.fromEntries(h.map((k,i)=>[k,v[i]])));
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
+  const head=rows.shift().map(h=>h.trim().toLowerCase());
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
+
+function norm(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+function distKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
+  const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
+  const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
+}
+
+async function loadCSV(){
+  const t=await fetch(CSV+"&v="+Date.now()).then(r=>r.text());
+  DATA=parseCSV(t);
+  render(DATA.slice(0,20));
 }
 
 function render(arr){
@@ -62,27 +73,6 @@ function render(arr){
     </div>
   `).join("")||"<p>Sin resultados</p>";
 }
-
-async function loadCSV(){
-  const t=await fetch(CSV+"&v="+Date.now()).then(r=>r.text());
-  DATA=parseCSV(t);render(DATA.slice(0,20));
-}
-loadCSV();
-
-document.getElementById("qall").addEventListener("keydown",e=>{if(e.key==="Enter")buscar(e.target.value);});
-document.getElementById("refreshBtn").onclick=()=>loadCSV();
-document.getElementById("clearBtn").onclick=()=>{document.getElementById("qall").value="";POS=null;render(DATA.slice(0,20));};
-document.getElementById("nearBtn").onclick=()=>{
-  const go=p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};buscar(document.getElementById("qall").value||"");};
-  if(navigator.geolocation)navigator.geolocation.getCurrentPosition(go,()=>{POS=null;buscar("");},{enableHighAccuracy:true,timeout:8000});
-};
-document.getElementById("micBtn").onclick=()=>{
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR)return alert("Sin soporte de voz");
-  const rec=new SR();rec.lang="es-AR";
-  rec.onresult=e=>{const txt=e.results[0][0].transcript;document.getElementById("qall").value=txt;buscar(txt);};
-  rec.start();
-};
 
 function buscar(qv){
   if(!DATA.length)return;
@@ -98,6 +88,23 @@ function buscar(qv){
   }
   render(res.slice(0,40));
 }
+
+document.getElementById("goBtn").onclick=()=>buscar(document.getElementById("qall").value);
+document.getElementById("clearBtn").onclick=()=>{document.getElementById("qall").value="";POS=null;render(DATA.slice(0,20));};
+document.getElementById("refreshBtn").onclick=()=>loadCSV();
+document.getElementById("nearBtn").onclick=()=>{
+  const go=p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};buscar(document.getElementById("qall").value||"");};
+  if(navigator.geolocation)navigator.geolocation.getCurrentPosition(go,()=>{POS=null;buscar("");},{enableHighAccuracy:true,timeout:8000});
+};
+document.getElementById("micBtn").onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return alert("Sin soporte de voz");
+  const rec=new SR();rec.lang="es-AR";
+  rec.onresult=e=>{const txt=e.results[0][0].transcript;document.getElementById("qall").value=txt;buscar(txt);};
+  rec.start();
+};
+document.getElementById("qall").addEventListener("keydown",e=>{if(e.key==="Enter")buscar(e.target.value);});
+loadCSV();
 </script>
 </body>
 </html>
