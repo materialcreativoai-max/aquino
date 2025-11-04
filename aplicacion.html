@@ -1,68 +1,52 @@
 <!doctype html>
 <html lang="es">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO (catálogo)</title>
-<style>
-:root{--pri:#0b5cff;}
-*{box-sizing:border-box}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
-.wrap{max-width:900px;margin:0 auto;padding:18px}
-h1{font-size:20px;margin:0 0 14px}
-.box{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:14px;margin:0 0 14px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #cfd6e0;border-radius:12px;font-size:15px}
-.btn{padding:10px 12px;border-radius:12px;border:1px solid var(--pri);background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
-.btn.secondary{background:#fff;color:var(--pri)}
-.btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
-.btn.mic{border:1px dashed var(--pri);background:#eef3ff}
-.tiny{font-size:12px;color:#667}
-.card{background:#f9fafc;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-.card-inner{display:flex;align-items:center;gap:12px;width:100%}
-.media{flex:0 0 80px;height:80px;display:flex;align-items:center;justify-content:center}
-.thumb-ico{max-width:80px;max-height:80px;object-fit:contain;border-radius:10px;background:#eef1f6;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-.card-body{flex:1;min-width:0;text-align:left;max-width:480px}
-.title{font-weight:700;margin:0 0 4px}
-.title span{font-weight:600;color:#555}
-.meta{font-size:12px;color:#566;margin-top:6px}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;justify-content:flex-start}
-@media (max-width:560px){
-.media{flex-basis:56px;height:56px}
-.thumb-ico{max-width:56px;max-height:56px;border-radius:8px}
-.title{font-size:16px}
-.card-body{font-size:14px;line-height:1.25;max-width:100%}
-.actions .btn{padding:9px 12px}
-}
-.err{padding:8px 10px;background:#fff3f3;border:1px solid #ffd2d2;border-radius:10px;margin-bottom:12px;color:#7a1a1a}
-.ok{padding:8px 10px;background:#eef9f1;border:1px solid #cfead8;border-radius:10px;margin-bottom:12px;color:#145a32}
-</style>
-</head>
-<body>
-<div class="wrap">
-<h1>🏷️ Aquí Nomás — DEMO (catálogo)</h1>
-<div id="status" class="ok" style="display:none"></div>
-<div id="error" class="err" style="display:none"></div>
-<div class="box">
-  <div class="row">
-    <input id="qall" class="input" placeholder="Ej: 'almorzar en gastronomix', 'arreglo de cierres en el centro'"/>
-    <button id="micBtn" class="btn mic" title="Dictar por voz">🎤</button>
-    <button id="goBtn" class="btn">Buscar</button>
-    <button id="clearBtn" class="btn ghost">Limpiar</button>
-    <button id="locBtn" class="btn secondary" title="Usar mi ubicación">📍 Cerca</button>
-    <button id="refreshBtn" class="btn" title="Volver a leer el CSV">Actualizar datos</button>
-  </div>
-  <div class="tiny" id="gpsHint" style="margin-top:6px;display:none"></div>
-</div>
-<div id="results" class="box"></div>
-</div>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aquí Nomás — App</title>
+<body style="font-family:sans-serif;background:#f8f9fa;color:#111;margin:0">
+<h2 style="padding:10px">Aquí Nomás — Demo</h2>
+<input id="q" placeholder="Decí o escribí algo…" style="padding:10px;width:80%;max-width:500px">
+<button id="mic">🎤</button>
+<button id="near">📍 Cerca</button>
+<div id="out" style="margin:1em"></div>
 
 <script>
-const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-function removeDiacritics(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
-function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(h=>h.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(v=>Object.fromEntries(h.map((k,i)=>[k,v[i]||""])));}
-function parseCoord(v){if(!v)return NaN;let s=String(v).trim().replace(/,/g,'.');let n=Number(s);if(Number.isNaN(n)){const d=s.replace(/[^0-9]/g,'');if(d.length>=7){n=parseInt(d,10)/1e6;if(/^[-]/.test(s))n=-Math.abs(n);}}if(Math.abs(n)>180)n/=1e6;return n;}
-function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
-let DATA=[],IDX=[],USER_POS=null,LOADED=false;
-function norm(s){return removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();}
-function loadCSV(){const st=document.getElementById("status");st.style.display="block";st.textContent="Cargando CSV…";return fetch(CSV_URL).then(r=>r.text()).then(t=>{DATA=parseCSV(t);IDX=DATA.map(row=>({nombre:norm(row.nombre_local||row.nombre||""),rubro:norm(ro
+const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+let DATA=[],POS=null;
+
+fetch(CSV).then(r=>r.text()).then(t=>{
+  const [h,...rows]=t.trim().split(/\r?\n/);
+  const head=h.split(",").map(x=>x.toLowerCase());
+  DATA=rows.map(l=>Object.fromEntries(l.split(",").map((v,i)=>[head[i],v])));
+});
+
+function norm(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+function distKm(a,b){const R=6371,toRad=d=>d*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat),dLon=toRad(b.lng-a.lng);
+  return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2));}
+
+function render(arr){out.innerHTML=arr.map(r=>`<div><b>${r.nombre_local}</b> — ${r.rubro}<br>${r.direccion}</div>`).join("<hr>")||"Sin resultados";}
+
+function search(q){
+  const w=norm(q);
+  if(!w)return;
+  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
+  if(POS)res=res.map(r=>{r._d=distKm(POS,{lat:+r.lat,lng:+r.lng});return r;}).filter(r=>r._d<1.5).sort((a,b)=>a._d-b._d);
+  render(res.slice(0,30));
+}
+
+mic.onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return alert("Sin soporte de voz");
+  const r=new SR();r.lang="es-AR";
+  r.onresult=e=>{q.value=e.results[0][0].transcript;search(q.value);}
+  r.start();
+};
+near.onclick=()=>navigator.geolocation.getCurrentPosition(p=>{
+  POS={lat:p.coords.latitude,lng:p.coords.longitude};
+  search(q.value||"");
+});
+q.onkeydown=e=>{if(e.key==="Enter")search(q.value);}
+</script>
+</body>
+</html>
