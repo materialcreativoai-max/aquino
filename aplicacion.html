@@ -1,51 +1,57 @@
 <!doctype html>
 <html lang="es">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aquí Nomás — App</title>
-<body style="font-family:sans-serif;background:#f8f9fa;color:#111;margin:0">
-<h2 style="padding:10px">Aquí Nomás — Demo</h2>
-<input id="q" placeholder="Decí o escribí algo…" style="padding:10px;width:80%;max-width:500px">
-<button id="mic">🎤</button>
-<button id="near">📍 Cerca</button>
-<div id="out" style="margin:1em"></div>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Galerías y Servicios — Aquí Nomás</title>
+  <style>
+    body{margin:0;background:#0b0d10;color:#e6e9ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center}
+    header{background:#0b0d10;padding:16px 0;border-bottom:1px solid #1c1f26;}
+    a.logo{color:#0b5cff;text-decoration:none;font-weight:600;font-size:18px;}
+    .wrap{padding:30px}
+    input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;border-radius:8px;background:#11151a;color:#e6e9ee}
+    button{padding:10px 14px;margin:4px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+    .mic{background:#0b5cff;color:#fff}
+    .sec{background:#1b1f26;color:#fff}
+    .ghost{background:#11151a;color:#e6e9ee;border:1px solid #1f232b}
+    #out{margin-top:20px;text-align:left;max-width:700px;margin-inline:auto}
+    .card{border:1px solid #1f232b;background:#11151a;border-radius:10px;padding:12px;margin:10px 0}
+    .card b{color:#0b5cff}
+    footer{margin-top:30px;font-size:13px;color:#8b94a1}
+  </style>
+</head>
+<body>
+  <header><a href="index.html" class="logo">Galerías y Servicios</a></header>
+  <div class="wrap">
+    <h2>Abriendo app…</h2>
+    <input id="q" placeholder="Buscar o decir un comercio…">
+    <div>
+      <button id="mic" class="mic">🎤 Voz</button>
+      <button id="near" class="sec">📍 Cerca</button>
+      <button id="clear" class="ghost">Limpiar</button>
+      <button id="reload" class="mic" style="background:#1f232b">Actualizar</button>
+    </div>
+    <div id="out"></div>
+  </div>
+  <footer>Datos actualizados en tiempo real desde Google Sheets</footer>
 
 <script>
 const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 let DATA=[],POS=null;
-
+const out=document.getElementById("out"),q=document.getElementById("q");
 fetch(CSV).then(r=>r.text()).then(t=>{
   const [h,...rows]=t.trim().split(/\r?\n/);
   const head=h.split(",").map(x=>x.toLowerCase());
   DATA=rows.map(l=>Object.fromEntries(l.split(",").map((v,i)=>[head[i],v])));
 });
-
 function norm(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
-function distKm(a,b){const R=6371,toRad=d=>d*Math.PI/180;
-  const dLat=toRad(b.lat-a.lat),dLon=toRad(b.lng-a.lng);
-  return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2));}
-
-function render(arr){out.innerHTML=arr.map(r=>`<div><b>${r.nombre_local}</b> — ${r.rubro}<br>${r.direccion}</div>`).join("<hr>")||"Sin resultados";}
-
-function search(q){
-  const w=norm(q);
-  if(!w)return;
-  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
-  if(POS)res=res.map(r=>{r._d=distKm(POS,{lat:+r.lat,lng:+r.lng});return r;}).filter(r=>r._d<1.5).sort((a,b)=>a._d-b._d);
-  render(res.slice(0,30));
-}
-
-mic.onclick=()=>{
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR)return alert("Sin soporte de voz");
-  const r=new SR();r.lang="es-AR";
-  r.onresult=e=>{q.value=e.results[0][0].transcript;search(q.value);}
-  r.start();
-};
-near.onclick=()=>navigator.geolocation.getCurrentPosition(p=>{
-  POS={lat:p.coords.latitude,lng:p.coords.longitude};
-  search(q.value||"");
-});
+function distKm(a,b){const R=6371,toRad=d=>d*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLon=toRad(b.lng-a.lng);return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2));}
+function render(arr){out.innerHTML=arr.map(r=>`<div class='card'><b>${r.nombre_local}</b> — ${r.rubro}<br>${r.direccion||""}</div>`).join("")||"<p>Sin resultados</p>";}
+function search(qv){const w=norm(qv);if(!w)return;let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));if(POS)res=res.map(r=>{r._d=distKm(POS,{lat:+r.lat,lng:+r.lng});return r;}).filter(r=>r._d<1.5).sort((a,b)=>a._d-b._d);render(res.slice(0,40));}
+mic.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return alert("Sin soporte de voz");const r=new SR();r.lang="es-AR";r.onresult=e=>{q.value=e.results[0][0].transcript;search(q.value);};r.start();};
+near.onclick=()=>navigator.geolocation.getCurrentPosition(p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};search(q.value||"");});
+reload.onclick=()=>location.reload();
+clear.onclick=()=>{q.value="";out.innerHTML="";};
 q.onkeydown=e=>{if(e.key==="Enter")search(q.value);}
 </script>
 </body>
