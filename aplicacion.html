@@ -1,94 +1,84 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Galerías y Servicios — Aquí Nomás</title>
-  <style>
-    body{margin:0;background:#0b0d10;color:#e6e9ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center}
-    header{background:#0b0d10;padding:16px 0;border-bottom:1px solid #1c1f26;}
-    a.logo{color:#0b5cff;text-decoration:none;font-weight:600;font-size:18px;}
-    .wrap{padding:30px}
-    input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;border-radius:8px;background:#11151a;color:#e6e9ee}
-    button{padding:10px 14px;margin:4px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
-    .mic{background:#0b5cff;color:#fff}
-    .sec{background:#1b1f26;color:#fff}
-    .ghost{background:#11151a;color:#e6e9ee;border:1px solid #1f232b}
-    #out{margin-top:20px;text-align:left;max-width:700px;margin-inline:auto}
-    .card{border:1px solid #1f232b;background:#11151a;border-radius:10px;padding:12px;margin:10px 0}
-    .card b{color:#0b5cff}
-    footer{margin-top:30px;font-size:13px;color:#8b94a1}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Galerías y Servicios — Aquí Nomás</title>
+<style>
+body{margin:0;background:#121418;color:#e6e9ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center}
+header{background:#121418;padding:16px 0;border-bottom:1px solid #1f232b;}
+a.logo{color:#0b5cff;text-decoration:none;font-weight:600;font-size:18px;}
+.wrap{padding:30px}
+input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;border-radius:8px;background:#1b1f26;color:#e6e9ee}
+button{padding:10px 14px;margin:4px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+.mic{background:#0b5cff;color:#fff}
+.sec{background:#1b1f26;color:#fff}
+.ghost{background:#1b1f26;color:#e6e9ee;border:1px solid #1f232b}
+#out{margin-top:20px;text-align:left;max-width:700px;margin-inline:auto}
+.card{border:1px solid #1f232b;background:#20242b;border-radius:10px;padding:12px;margin:10px 0}
+.card b{color:#0b5cff}
+.card img{max-width:100%;border-radius:8px;display:block;margin-top:8px}
+footer{margin-top:30px;font-size:13px;color:#8b94a1}
+</style>
 </head>
 <body>
-  <header><a href="index.html" class="logo">Galerías y Servicios</a></header>
-  <div class="wrap">
-    <h2>Abriendo app…</h2>
-    <input id="q" placeholder="Buscar o decir un comercio…">
-    <div>
-      <button id="mic" class="mic">🎤 Voz</button>
-      <button id="near" class="sec">📍 Cerca</button>
-      <button id="clear" class="ghost">Limpiar</button>
-      <button id="reload" class="mic" style="background:#1f232b">Actualizar</button>
-    </div>
-    <div id="out"></div>
-  </div>
-  <footer>Datos actualizados en tiempo real desde Google Sheets</footer>
+<header><a href="index.html" class="logo">Galerías y Servicios</a></header>
+<div class="wrap">
+<h2>Abriendo app…</h2>
+<input id="q" placeholder="Buscar o decir un comercio…">
+<div>
+  <button id="mic" class="mic">🎤 Voz</button>
+  <button id="near" class="sec">📍 Cerca</button>
+  <button id="clear" class="ghost">Limpiar</button>
+  <button id="reload" class="mic" style="background:#1f232b">Actualizar</button>
+</div>
+<div id="out"></div>
+</div>
+<footer>Datos actualizados en tiempo real desde Google Sheets</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-document.addEventListener("DOMContentLoaded", function(){
-  const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-  const el = id => document.getElementById(id);
-  const q=el("q"), out=el("out"), bMic=el("mic"), bNear=el("near"), bClear=el("clear"), bReload=el("reload");
-  let DATA=[], POS=null;
-
-  Papa.parse(CSV, {
-    download:true, header:true, skipEmptyLines:true,
-    complete: r => { DATA=r.data||[]; render(DATA.slice(0,20)); },
-    error: e => { out.innerHTML="<p>Error cargando CSV</p>"; console.error(e); }
-  });
-
-  const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
-  const distKm=(a,b)=>{const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
-    return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLon/2)**2));};
-
-  function render(arr){
-    out.innerHTML=(arr||[]).map(r=>`
-      <div class="card">
-        <b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
-        ${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
-      </div>
-    `).join("")||"<p>Sin resultados</p>";
-  }
-
-  function buscar(qv){
-    if(!DATA.length)return;
-    const w=norm(qv);if(!w){render(DATA.slice(0,20));return;}
-    let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
-    if(POS)res=res.map(r=>{const lat=+r.lat,lng=+r.lng;r._d=(isFinite(lat)&&isFinite(lng))?distKm(POS,{lat,lng}):Infinity;return r;})
-                   .filter(r=>isFinite(r._d)&&r._d<=1.5)
-                   .sort((a,b)=>a._d-b._d);
-    render(res.slice(0,40));
-  }
-
-  q.addEventListener("keydown",e=>{if(e.key==="Enter")buscar(q.value);});
-
-  bMic.addEventListener("click",()=>{
-    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SR)return alert("Sin soporte de voz");
-    const r=new SR();r.lang="es-AR";
-    r.onresult=e=>{q.value=e.results[0][0].transcript;buscar(q.value);};
-    r.start();
-  });
-
-  bNear.addEventListener("click",()=>{
-    const go=p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};buscar(q.value||"");};
-    if(navigator.geolocation)navigator.geolocation.getCurrentPosition(go,()=>{POS=null;buscar(q.value||"");},{enableHighAccuracy:true,timeout:8000});
-  });
-
-  bClear.addEventListener("click",()=>{q.value="";POS=null;render(DATA.slice(0,20));});
-  bReload.addEventListener("click",()=>location.reload());
+document.addEventListener("DOMContentLoaded",()=>{
+const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+const q=document.getElementById("q"),out=document.getElementById("out");
+let DATA=[],POS=null;
+Papa.parse(CSV,{download:true,header:true,skipEmptyLines:true,
+complete:r=>{DATA=r.data||[];render(DATA.slice(0,20));},
+error:e=>{out.innerHTML="<p>Error cargando CSV</p>";console.error(e);}
+});
+const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+const distKm=(a,b)=>{const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
+return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLon/2)**2));};
+function render(arr){
+out.innerHTML=(arr||[]).map(r=>`
+<div class="card">
+<b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
+${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
+${r.imagen_url?`<img src="${r.imagen_url}" alt="${r.nombre_local}">`:""}
+</div>`).join("")||"<p>Sin resultados</p>";
+}
+function buscar(qv){
+if(!DATA.length)return;
+const w=norm(qv);if(!w){render(DATA.slice(0,20));return;}
+let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
+if(POS)res=res.map(r=>{const lat=+r.lat,lng=+r.lng;r._d=(isFinite(lat)&&isFinite(lng))?distKm(POS,{lat,lng}):Infinity;return r;})
+.filter(r=>isFinite(r._d)&&r._d<=1.5).sort((a,b)=>a._d-b._d);
+render(res.slice(0,40));
+}
+q.addEventListener("keydown",e=>{if(e.key==="Enter")buscar(q.value);});
+document.getElementById("mic").onclick=()=>{
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!SR)return alert("Sin soporte de voz");
+const r=new SR();r.lang="es-AR";
+r.onresult=e=>{q.value=e.results[0][0].transcript;buscar(q.value);};
+r.start();
+};
+document.getElementById("near").onclick=()=>{
+const go=p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};buscar(q.value||"");};
+if(navigator.geolocation)navigator.geolocation.getCurrentPosition(go,()=>{POS=null;buscar(q.value||"");},{enableHighAccuracy:true,timeout:8000});
+};
+document.getElementById("clear").onclick=()=>{q.value="";POS=null;render(DATA.slice(0,20));};
+document.getElementById("reload").onclick=()=>location.reload();
 });
 </script>
 </body>
