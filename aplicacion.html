@@ -39,7 +39,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-window.onload = function() {
+document.addEventListener("DOMContentLoaded", function() {
+
   const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
   const el = id => document.getElementById(id);
   const q=el("q"), out=el("out"), bMic=el("mic"), bNear=el("near"), bClear=el("clear"), bReload=el("reload");
