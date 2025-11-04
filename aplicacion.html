@@ -1,12 +1,97 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=https://materialcreativoai-max.github.io/aquino/app/">
-  <title>Redirigiendo a la app...</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Galerías y Servicios — App</title>
+  <style>
+    :root{--bg:#0b0f12;--card:#0f1720;--muted:#9aa4ad;--accent:#4fd1c5}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial;background:var(--bg);color:#e6eef3}
+    .wrap{max-width:1100px;margin:28px auto;padding:18px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    h1{font-size:18px;margin:0}
+    .search{display:flex;gap:8px;align-items:center}
+    input[type="search"]{
+      background:#071018;border:1px solid #17202a;padding:10px 12px;border-radius:8px;color:#e6eef3;
+      min-width:260px;outline:none;
+    }
+    .row{display:grid;grid-template-columns:2fr 1.2fr 2fr;gap:12px;padding:12px;border-radius:8px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);margin-bottom:8px;}
+    .head{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:0.06em}
+    .empty{color:var(--muted);padding:28px;text-align:center}
+    .pill{font-size:12px;padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.02);color:var(--muted);}
+    .loading{color:var(--muted);font-size:13px}
+    @media(max-width:720px){.row{grid-template-columns:1fr;}}
+  </style>
 </head>
-<body style="background-color:#111; color:#fff; font-family:sans-serif; text-align:center; margin-top:20%;">
-  <h2>Redirigiendo a la aplicación...</h2>
-  <p>Si no se abre automáticamente, <a href="https://materialcreativoai-max.github.io/aquino/app/" style="color:#9cf;">haz clic aquí</a>.</p>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Galerías y Servicios — Locales</h1>
+        <div style="color:var(--muted);font-size:13px;margin-top:6px">Lectura directa desde Google Sheets (CSV)</div>
+      </div>
+      <div class="search">
+        <input id="q" type="search" placeholder="Buscar por nombre, rubro o dirección..." aria-label="buscar">
+        <div class="pill" id="count">--</div>
+      </div>
+    </header>
+
+    <div id="table" style="margin-top:12px">
+      <div class="head row" style="background:transparent;padding:6px 12px">
+        <div>Nombre</div>
+        <div>Rubro</div>
+        <div>Dirección</div>
+      </div>
+      <div id="list"></div>
+      <div id="empty" class="empty" style="display:none">No hay resultados</div>
+      <div id="loading" class="loading">Cargando datos…</div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script>
+  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+  const $q = document.getElementById('q');
+  const $list = document.getElementById('list');
+  const $empty = document.getElementById('empty');
+  const $loading = document.getElementById('loading');
+  const $count = document.getElementById('count');
+  let rows = [];
+
+  function render(items){
+    $list.innerHTML = '';
+    if(!items.length){ $empty.style.display='block'; $count.textContent='0'; return; }
+    $empty.style.display='none'; $count.textContent=items.length;
+    const frag=document.createDocumentFragment();
+    items.forEach(r=>{
+      const el=document.createElement('div');
+      el.className='row';
+      el.innerHTML=`<div><strong>${r.nombre_local||'—'}</strong></div>
+                    <div style="color:var(--muted)">${r.rubro||'—'}</div>
+                    <div style="color:var(--muted)">${r.direccion||'—'}</div>`;
+      frag.appendChild(el);
+    });
+    $list.appendChild(frag);
+  }
+
+  function doFilter(){
+    const q=$q.value.trim().toLowerCase();
+    if(!q){render(rows);return;}
+    render(rows.filter(r=>
+      (r.nombre_local||'').toLowerCase().includes(q)||
+      (r.rubro||'').toLowerCase().includes(q)||
+      (r.direccion||'').toLowerCase().includes(q)
+    ));
+  }
+
+  Papa.parse(CSV_URL,{
+    download:true,header:true,skipEmptyLines:true,
+    complete:r=>{rows=r.data; $loading.style.display='none'; render(rows);},
+    error:()=>{$loading.textContent='Error cargando CSV';}
+  });
+
+  $q.addEventListener('input',doFilter);
+</script>
 </body>
 </html>
