@@ -35,37 +35,60 @@
   </div>
   <footer>Datos actualizados en tiempo real desde Google Sheets</footer>
 
+
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
 const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-let DATA=[],POS=null;
-const out=document.getElementById("out"),q=document.getElementById("q");
+const el = id => document.getElementById(id);
+const q=el("q"), out=el("out"), bMic=el("mic"), bNear=el("near"), bClear=el("clear"), bReload=el("reload");
+let DATA=[], POS=null;
 
-Papa.parse(CSV,{download:true,header:true,skipEmptyLines:true,
-  complete: r=>{ DATA=r.data; },
-  error: e=>{ out.innerHTML="<p>Error cargando CSV</p>"; console.error(e); }
+Papa.parse(CSV + "&v=" + Date.now(), {
+  download:true, header:true, skipEmptyLines:true,
+  complete: r => { DATA = r.data || []; render(DATA.slice(0,20)); },
+  error: e => { out.innerHTML = "<p>Error cargando CSV</p>"; console.error(e); }
 });
 
-function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
-function distKm(a,b){const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
-  return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLon/2)**2));}
-function render(arr){out.innerHTML=arr.map(r=>`<div class='card'><b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>${r.direccion||""}</div>`).join("")||"<p>Sin resultados</p>";}
-function search(qv){
-  const w=norm(qv); if(!w) return;
-  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
-  if(POS) res=res.map(r=>{r._d=distKm(POS,{lat:+r.lat,lng:+r.lng});return r;}).filter(r=>isFinite(r._d)&&r._d<1.5).sort((a,b)=>a._d-b._d);
+const norm = s => (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+const distKm=(a,b)=>{const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
+  return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLon/2)**2));};
+
+function render(arr){
+  out.innerHTML = (arr||[]).map(r=>`<div class="card">
+    <b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
+  </div>`).join("") || "<p>Sin resultados</p>";
+}
+
+function buscar(qv){
+  if(!DATA.length) return;
+  const w = norm(qv); if(!w){ render(DATA.slice(0,20)); return; }
+  let res = DATA.filter(r => norm(r.nombre_local).includes(w) || norm(r.rubro).includes(w) || norm(r.direccion).includes(w));
+  if(POS) res = res.map(r=>{ const lat=+r.lat, lng=+r.lng; r._d = (isFinite(lat)&&isFinite(lng)) ? distKm(POS,{lat,lng}) : Infinity; return r; })
+                   .filter(r=>isFinite(r._d) && r._d<=1.5)
+                   .sort((a,b)=>a._d-b._d);
   render(res.slice(0,40));
 }
 
-mic.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR) return alert("Sin soporte de voz");
-  const r=new SR(); r.lang="es-AR"; r.onresult=e=>{q.value=e.results[0][0].transcript;search(q.value);}; r.start();};
+q.onkeydown = e => { if(e.key==="Enter") buscar(q.value); };
 
-near.onclick=()=>navigator.geolocation.getCurrentPosition(p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};search(q.value||"");});
-reload.onclick=()=>location.reload();
-clear.onclick=()=>{q.value="";out.innerHTML="";};
-q.onkeydown=e=>{if(e.key==="Enter")search(q.value);}
+bMic.onclick = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) return alert("Sin soporte de voz");
+  const r = new SR(); r.lang="es-AR";
+  r.onresult = e => { q.value = e.results[0][0].transcript; buscar(q.value); };
+  try{ r.start(); }catch(_){}
+};
+
+bNear.onclick = () => {
+  const go = p => { POS = { lat:p.coords.latitude, lng:p.coords.longitude }; buscar(q.value||""); };
+  navigator.geolocation ? navigator.geolocation.getCurrentPosition(go, ()=>{POS=null; buscar(q.value||"");}, {enableHighAccuracy:true, timeout:8000})
+                        : (POS=null, buscar(q.value||""));
+};
+
+bClear.onclick = () => { q.value=""; POS=null; render(DATA.slice(0,20)); };
+bReload.onclick = () => location.reload();
 </script>
+
 
 </body>
 </html>
