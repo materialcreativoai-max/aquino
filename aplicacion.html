@@ -17,7 +17,7 @@ button{padding:10px 14px;margin:4px;border:none;border-radius:8px;cursor:pointer
 #out{margin-top:20px;text-align:left;max-width:700px;margin-inline:auto}
 .card{border:1px solid #1f232b;background:#20242b;border-radius:10px;padding:12px;margin:10px 0}
 .card b{color:#0b5cff}
-.card img{max-width:100%;border-radius:8px;display:block;margin-top:8px}
+.card img{max-width:100%;max-height:100px;border-radius:8px;display:block;margin-top:8px;object-fit:cover}
 footer{margin-top:30px;font-size:13px;color:#8b94a1}
 </style>
 </head>
@@ -27,10 +27,10 @@ footer{margin-top:30px;font-size:13px;color:#8b94a1}
 <h2>Abriendo app…</h2>
 <input id="q" placeholder="Buscar o decir un comercio…">
 <div>
-  <button id="mic" class="mic">🎤 Voz</button>
-  <button id="near" class="sec">📍 Cerca</button>
-  <button id="clear" class="ghost">Limpiar</button>
-  <button id="reload" class="mic" style="background:#1f232b">Actualizar</button>
+  <button class="mic" onclick="startMic()">🎤 Voz</button>
+  <button class="sec" onclick="buscarCercanos()">📍 Cerca</button>
+  <button class="ghost" onclick="limpiar()">Limpiar</button>
+  <button class="mic" style="background:#1f232b" onclick="recargar()">Actualizar</button>
 </div>
 <div id="out"></div>
 </div>
@@ -38,48 +38,54 @@ footer{margin-top:30px;font-size:13px;color:#8b94a1}
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-document.addEventListener("DOMContentLoaded",()=>{
 const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-const q=document.getElementById("q"),out=document.getElementById("out");
-let DATA=[],POS=null;
+let DATA=[], POS=null;
+const q=document.getElementById("q"), out=document.getElementById("out");
+
 Papa.parse(CSV,{download:true,header:true,skipEmptyLines:true,
-complete:r=>{DATA=r.data||[];render(DATA.slice(0,20));},
-error:e=>{out.innerHTML="<p>Error cargando CSV</p>";console.error(e);}
+ complete:r=>{DATA=r.data||[];render(DATA.slice(0,20));},
+ error:e=>{out.innerHTML="<p>Error cargando CSV</p>";console.error(e);}
 });
+
 const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
 const distKm=(a,b)=>{const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
-return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLon/2)**2));};
+ return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLon/2)**2));};
+
 function render(arr){
-out.innerHTML=(arr||[]).map(r=>`
-<div class="card">
-<b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
-${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
-${r.imagen_url?`<img src="${r.imagen_url}" alt="${r.nombre_local}">`:""}
-</div>`).join("")||"<p>Sin resultados</p>";
+ out.innerHTML=(arr||[]).map(r=>`
+  <div class="card">
+   <b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
+   ${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
+   ${r.imagen_url?`<img src="${r.imagen_url}" alt="${r.nombre_local}">`:""}
+  </div>`).join("")||"<p>Sin resultados</p>";
 }
+
 function buscar(qv){
-if(!DATA.length)return;
-const w=norm(qv);if(!w){render(DATA.slice(0,20));return;}
-let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
-if(POS)res=res.map(r=>{const lat=+r.lat,lng=+r.lng;r._d=(isFinite(lat)&&isFinite(lng))?distKm(POS,{lat,lng}):Infinity;return r;})
-.filter(r=>isFinite(r._d)&&r._d<=1.5).sort((a,b)=>a._d-b._d);
-render(res.slice(0,40));
+ if(!DATA.length)return;
+ const w=norm(qv);if(!w){render(DATA.slice(0,20));return;}
+ let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
+ if(POS)res=res.map(r=>{const lat=+r.lat,lng=+r.lng;r._d=(isFinite(lat)&&isFinite(lng))?distKm(POS,{lat,lng}):Infinity;return r;})
+                .filter(r=>isFinite(r._d)&&r._d<=1.5)
+                .sort((a,b)=>a._d-b._d);
+ render(res.slice(0,40));
 }
+
+function startMic(){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR)return alert("Sin soporte de voz");
+ const r=new SR();r.lang="es-AR";
+ r.onresult=e=>{q.value=e.results[0][0].transcript;buscar(q.value);};
+ r.start();
+}
+
+function buscarCercanos(){
+ const go=p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};buscar(q.value||"");};
+ if(navigator.geolocation)navigator.geolocation.getCurrentPosition(go,()=>{POS=null;buscar(q.value||"");},{enableHighAccuracy:true,timeout:8000});
+}
+
+function limpiar(){q.value="";POS=null;render(DATA.slice(0,20));}
+function recargar(){location.reload();}
 q.addEventListener("keydown",e=>{if(e.key==="Enter")buscar(q.value);});
-document.getElementById("mic").onclick=()=>{
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-if(!SR)return alert("Sin soporte de voz");
-const r=new SR();r.lang="es-AR";
-r.onresult=e=>{q.value=e.results[0][0].transcript;buscar(q.value);};
-r.start();
-};
-document.getElementById("near").onclick=()=>{
-const go=p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};buscar(q.value||"");};
-if(navigator.geolocation)navigator.geolocation.getCurrentPosition(go,()=>{POS=null;buscar(q.value||"");},{enableHighAccuracy:true,timeout:8000});
-};
-document.getElementById("clear").onclick=()=>{q.value="";POS=null;render(DATA.slice(0,20));};
-document.getElementById("reload").onclick=()=>location.reload();
-});
 </script>
 </body>
 </html>
