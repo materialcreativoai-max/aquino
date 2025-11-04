@@ -63,23 +63,8 @@ function render(arr){
   `).join("")||"<p>Sin resultados</p>";
 }
 
-function buscar(qv){
-  if(!DATA.length)return;
-  const w=norm(qv);
-  if(!w){render(DATA.slice(0,20));return;}
-  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w)||norm(r.keywords||"").includes(w));
-  if(POS){
-    res=res.map(r=>{
-      const lat=+r.lat,lng=+r.lng;
-      r._d=(isFinite(lat)&&isFinite(lng))?distKm(POS,{lat,lng}):Infinity;
-      return r;
-    }).filter(r=>isFinite(r._d)&&r._d<=1.5).sort((a,b)=>a._d-b._d);
-  }
-  render(res.slice(0,40));
-}
-
 async function loadCSV(){
-  const t=await fetch(CSV+"?v="+Date.now()).then(r=>r.text());
+  const t=await fetch(CSV+"&v="+Date.now()).then(r=>r.text());
   DATA=parseCSV(t);render(DATA.slice(0,20));
 }
 loadCSV();
@@ -98,6 +83,21 @@ document.getElementById("micBtn").onclick=()=>{
   rec.onresult=e=>{const txt=e.results[0][0].transcript;document.getElementById("qall").value=txt;buscar(txt);};
   rec.start();
 };
+
+function buscar(qv){
+  if(!DATA.length)return;
+  const w=norm(qv);
+  if(!w){render(DATA.slice(0,20));return;}
+  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w)||norm(r.keywords||"").includes(w));
+  if(POS){
+    res=res.map(r=>{
+      const lat=+r.lat,lng=+r.lng;
+      r._d=(isFinite(lat)&&isFinite(lng))?distKm(POS,{lat,lng}):Infinity;
+      return r;
+    }).filter(r=>isFinite(r._d)&&r._d<=1.5).sort((a,b)=>a._d-b._d);
+  }
+  render(res.slice(0,40));
+}
 </script>
 </body>
 </html>
