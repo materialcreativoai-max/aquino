@@ -3,113 +3,31 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO (catálogo)</title>
+<title>Prueba mínima — Aquí Nomás</title>
 <style>
-:root{--azul:#0b5cff;}
-body{margin:0;background:#121418;color:#e6e9ee;
-font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center}
-.wrap{max-width:900px;margin:0 auto;padding:18px}
-h1{font-size:20px;margin:0 0 14px;color:var(--azul)}
-.box{background:#1b1f26;border:1px solid #1f232b;border-radius:14px;padding:14px;margin:0 0 14px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
-.input{flex:1;min-width:260px;padding:12px 14px;border:1px solid #1f232b;border-radius:12px;font-size:15px;background:#121418;color:#e6e9ee}
-.btn{padding:10px 12px;border-radius:12px;border:1px solid var(--azul);background:var(--azul);color:#fff;font-weight:600;cursor:pointer}
-.btn.secondary{background:#1b1f26;color:#fff}
-.btn.ghost{background:#1b1f26;border:1px solid #1f232b;color:#e6e9ee}
-.card{background:#1b1f26;border:1px solid #1f232b;border-radius:14px;padding:12px;margin:10px 0;text-align:left}
-.card b{color:var(--azul)}
-.card img{max-width:100%;max-height:100px;border-radius:10px;margin-top:8px;object-fit:cover}
-footer{margin-top:30px;font-size:13px;color:#8b94a1}
+body{background:#121418;color:#e6e9ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:30px}
+button{padding:10px 14px;margin-top:12px;border:none;border-radius:8px;background:#0b5cff;color:#fff;cursor:pointer}
+#out{margin-top:20px;text-align:left;white-space:pre-wrap}
 </style>
 </head>
 <body>
-<div class="wrap">
-<h1>🏷️ Aquí Nomás — DEMO (catálogo)</h1>
-<div class="box">
-  <div class="row">
-    <input id="qall" class="input" placeholder="Ej: 'almorzar en gastronomix', 'arreglo de cierres en el centro'"/>
-    <button id="micBtn" class="btn">🎤 Voz</button>
-    <button id="goBtn" class="btn secondary">Buscar</button>
-    <button id="clearBtn" class="btn ghost">Limpiar</button>
-    <button id="nearBtn" class="btn secondary">📍 Cerca</button>
-    <button id="refreshBtn" class="btn ghost">Actualizar</button>
-  </div>
-</div>
-<div id="results" class="box"></div>
-<footer>Datos actualizados en tiempo real desde Google Sheets</footer>
-</div>
+<h1>Prueba mínima — CSV</h1>
+<p>Si ves texto debajo, el script se ejecuta.</p>
+<button id="go">Cargar datos</button>
+<div id="out">Esperando...</div>
 
 <script>
-window.addEventListener("DOMContentLoaded",()=>{
-
-const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-let DATA=[],POS=null;
-
-function parseCSV(txt){
-  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
-  const head=rows.shift().map(h=>h.trim().toLowerCase());
-  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
-}
-
-function norm(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
-function distKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;
-  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
-  const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
-  const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
-  return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
-}
-
-async function loadCSV(){
-  const t=await fetch(CSV+"&v="+Date.now()).then(r=>r.text());
-  DATA=parseCSV(t);
-  render(DATA.slice(0,20));
-}
-
-function render(arr){
-  const box=document.getElementById("results");
-  box.innerHTML=(arr||[]).map(r=>`
-    <div class="card">
-      <b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
-      ${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
-      ${r.imagen_url?`<img src="${r.imagen_url}" alt="${r.nombre_local}">`:""}
-    </div>
-  `).join("")||"<p>Sin resultados</p>";
-}
-
-function buscar(qv){
-  if(!DATA.length)return;
-  const w=norm(qv);
-  if(!w){render(DATA.slice(0,20));return;}
-  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w)||norm(r.keywords||"").includes(w));
-  if(POS){
-    res=res.map(r=>{
-      const lat=+r.lat,lng=+r.lng;
-      r._d=(isFinite(lat)&&isFinite(lng))?distKm(POS,{lat,lng}):Infinity;
-      return r;
-    }).filter(r=>isFinite(r._d)&&r._d<=1.5).sort((a,b)=>a._d-b._d);
+document.getElementById("go").onclick=async()=>{
+  const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+  document.getElementById("out").textContent="Leyendo CSV...";
+  try{
+    const t=await fetch(CSV).then(r=>r.text());
+    const lines=t.split(/\r?\n/).slice(0,5).join("\n");
+    document.getElementById("out").textContent="Primeras líneas del CSV:\n\n"+lines;
+  }catch(e){
+    document.getElementById("out").textContent="Error: "+e;
   }
-  render(res.slice(0,40));
-}
-
-document.getElementById("goBtn").addEventListener("click",()=>buscar(document.getElementById("qall").value));
-document.getElementById("clearBtn").addEventListener("click",()=>{document.getElementById("qall").value="";POS=null;render(DATA.slice(0,20));});
-document.getElementById("refreshBtn").addEventListener("click",loadCSV);
-document.getElementById("nearBtn").addEventListener("click",()=>{
-  const go=p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};buscar(document.getElementById("qall").value||"");};
-  if(navigator.geolocation)navigator.geolocation.getCurrentPosition(go,()=>{POS=null;buscar("");},{enableHighAccuracy:true,timeout:8000});
-});
-document.getElementById("micBtn").addEventListener("click",()=>{
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR)return alert("Sin soporte de voz");
-  const rec=new SR();rec.lang="es-AR";
-  rec.onresult=e=>{const txt=e.results[0][0].transcript;document.getElementById("qall").value=txt;buscar(txt);};
-  rec.start();
-});
-document.getElementById("qall").addEventListener("keydown",e=>{if(e.key==="Enter")buscar(e.target.value);});
-
-loadCSV();
-
-});
+};
 </script>
 </body>
 </html>
