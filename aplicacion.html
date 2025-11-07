@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — Versión sin carga inicial</title>
+<title>Aquí Nomás — versión restaurada</title>
 <style>
-body{background:#121418;color:#e6e9ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:30px}
+:root{--azul:#0b5cff;}
+body{margin:0;background:#121418;color:#e6e9ee;
+font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:30px}
 input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;border-radius:8px;background:#1b1f26;color:#e6e9ee}
 button{padding:10px 14px;margin:4px;border:none;border-radius:8px;background:#0b5cff;color:#fff;cursor:pointer;font-weight:600}
 .card{background:#1b1f26;border:1px solid #1f232b;border-radius:10px;padding:12px;margin:10px auto;max-width:700px;text-align:left}
@@ -14,7 +16,7 @@ button{padding:10px 14px;margin:4px;border:none;border-radius:8px;background:#0b
 </head>
 <body>
 <h1>🏷️ Aquí Nomás — Catálogo</h1>
-<input id="q" placeholder="Buscar comercio...">
+<input id="q" placeholder="Buscar comercio o servicio...">
 <div>
   <button id="goBtn">Buscar</button>
   <button id="clearBtn">Limpiar</button>
@@ -32,6 +34,24 @@ function parseCSV(txt){
   const head=rows.shift().map(h=>h.trim().toLowerCase());
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
+
+function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+function parseCoord(v){
+  if(!v)return NaN;
+  let s=String(v).trim().replace(/,/g,'.');
+  let n=Number(s);
+  if(Number.isNaN(n)){
+    const d=s.replace(/[^0-9]/g,'');
+    if(d.length>=7){ n=parseInt(d,10)/1e6; if(/^[-]/.test(s)) n=-Math.abs(n); }
+  }
+  if(Math.abs(n)>180) n/=1e6;
+  return n;
+}
+function distKm(a,b){const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLng=t(b.lng-a.lng);
+  const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
+  const A=s1*s1+Math.cos(t(a.lat))*Math.cos(t(b.lat))*s2*s2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
+}
 function render(arr,msg){
   const box=document.getElementById("results");
   if(!arr||!arr.length){box.innerHTML=`<p>${msg||"Sin resultados"}</p>`;return;}
@@ -42,31 +62,38 @@ function render(arr,msg){
       ${r.imagen_url?`<img src="${r.imagen_url}" style="max-height:100px;border-radius:8px;margin-top:6px">`:""}
     </div>`).join("");
 }
-function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
-function distKm(a,b){const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
-  const s1=Math.sin(dLat/2),s2=Math.sin(dLon/2);
-  return 2*R*Math.asin(Math.min(1,Math.sqrt(s1*s1+Math.cos(t(a.lat))*Math.cos(t(b.lat))*s2*s2)));
-}
-
 async function loadCSV(){
   const t=await fetch(CSV).then(r=>r.text());
   DATA=parseCSV(t);
 }
-
+function aliasQuery(q){
+  let s=norm(q);
+  s=s.replace(/\bgastronomics?\b/g,"gastronomix")
+     .replace(/\bhelad(e|o|a|os|as)\b/g,"heladeria")
+     .replace(/\bcom(er|ida|er|edor|edores|erias?)\b/g,"gastronomia")
+     .replace(/\blibr(o|eria|os)\b/g,"libreria")
+     .replace(/\bcierre(s)?\b/g,"costureria")
+     .replace(/\barreglo(s)?\b/g,"costureria")
+     .replace(/\bcafe(s|cito)?\b/g,"cafe")
+     .replace(/\bcentro\b/g,"microcentro");
+  return s;
+}
 function buscar(qv){
   if(!DATA.length){render([],"Cargando datos...");return;}
-  const w=norm(qv);
+  const w=aliasQuery(qv);
   if(!w){render([],"Escribí un texto para buscar");return;}
-  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
+  let res=DATA.filter(r=>{
+    const nombre=norm(r.nombre_local), rubro=norm(r.rubro), dir=norm(r.direccion), kw=norm(r.keywords||"");
+    return nombre.includes(w)||rubro.includes(w)||dir.includes(w)||kw.includes(w);
+  });
   render(res.length?res:[],"Sin resultados");
 }
-
 function buscarCerca(){
   if(!navigator.geolocation){alert("Geolocalización no disponible");return;}
   navigator.geolocation.getCurrentPosition(pos=>{
     POS={lat:pos.coords.latitude,lng:pos.coords.longitude};
     const res=DATA.map(r=>{
-      const lat=+r.lat,lng=+r.lng;
+      const lat=parseCoord(r.lat),lng=parseCoord(r.lng);
       if(!isFinite(lat)||!isFinite(lng))return null;
       const d=distKm(POS,{lat,lng});
       return {...r,dist:d};
@@ -80,7 +107,6 @@ document.getElementById("clearBtn").onclick=()=>{document.getElementById("q").va
 document.getElementById("refreshBtn").onclick=()=>{loadCSV();render([],"Datos actualizados, hacé una búsqueda");};
 document.getElementById("nearBtn").onclick=buscarCerca;
 document.getElementById("q").addEventListener("keydown",e=>{if(e.key==="Enter")buscar(e.target.value);});
-
 loadCSV();
 </script>
 </body>
