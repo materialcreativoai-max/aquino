@@ -38,48 +38,39 @@ function render(arr){
     <div class="card">
       <b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
       ${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
-      ${r.imagen_url?`<img src="${r.imagen_url}" style="max-height:100px;border-radius:8px;margin-top:6px">`:""}
     </div>`).join("")||"<p>Sin resultados</p>";
-}
-function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
-function distKm(a,b){const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
-  const s1=Math.sin(dLat/2),s2=Math.sin(dLon/2);
-  return 2*R*Math.asin(Math.min(1,Math.sqrt(s1*s1+Math.cos(t(a.lat))*Math.cos(t(b.lat))*s2*s2)));
 }
 
 async function loadCSV(){
+  console.log("Cargando CSV…");
   const t=await fetch(CSV).then(r=>r.text());
   DATA=parseCSV(t);
   render(DATA.slice(0,5));
+  console.log("CSV cargado:",DATA.length,"filas");
 }
 function buscar(qv){
+  console.log("Buscar:",qv);
   if(!DATA.length)return;
-  const w=norm(qv);
-  if(!w){render(DATA.slice(0,5));return;}
-  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
+  const w=qv.toLowerCase();
+  let res=DATA.filter(r=>r.nombre_local.toLowerCase().includes(w)||r.rubro.toLowerCase().includes(w));
   render(res);
 }
 function buscarCerca(){
+  console.log("Intentando geolocalización…");
   if(!navigator.geolocation){alert("Geolocalización no disponible");return;}
   navigator.geolocation.getCurrentPosition(pos=>{
-    POS={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    const res=DATA.map(r=>{
-      const lat=+r.lat,lng=+r.lng;
-      if(!isFinite(lat)||!isFinite(lng))return null;
-      const d=distKm(POS,{lat,lng});
-      return {...r,dist:d};
-    }).filter(r=>r&&r.dist<=1.5).sort((a,b)=>a.dist-b.dist);
-    render(res);
-  },()=>alert("No se pudo obtener ubicación"));
+    console.log("Posición:",pos.coords.latitude,pos.coords.longitude);
+  },err=>console.log("Error geoloc:",err));
 }
 
 document.getElementById("goBtn").onclick=()=>buscar(document.getElementById("q").value);
-document.getElementById("clearBtn").onclick=()=>{document.getElementById("q").value="";render(DATA.slice(0,5));};
-document.getElementById("refreshBtn").onclick=()=>loadCSV();
+document.getElementById("clearBtn").onclick=()=>{console.log("Limpiar presionado");document.getElementById("q").value="";render(DATA.slice(0,5));};
+document.getElementById("refreshBtn").onclick=()=>{console.log("Actualizar presionado");loadCSV();};
 document.getElementById("nearBtn").onclick=buscarCerca;
 document.getElementById("q").addEventListener("keydown",e=>{if(e.key==="Enter")buscar(e.target.value);});
 
 loadCSV();
 </script>
+
 </body>
 </html>
