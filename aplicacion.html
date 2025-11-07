@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Prueba búsqueda — Aquí Nomás</title>
+<title>Prueba — Búsqueda + Botones</title>
 <style>
 body{background:#121418;color:#e6e9ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:30px}
 input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;border-radius:8px;background:#1b1f26;color:#e6e9ee}
@@ -13,20 +13,25 @@ button{padding:10px 14px;margin:4px;border:none;border-radius:8px;background:#0b
 </style>
 </head>
 <body>
-<h1>Prueba de búsqueda</h1>
-<input id="q" placeholder="Escribí un nombre o rubro y presioná Enter">
+<h1>Prueba — Búsqueda + Botones</h1>
+<input id="q" placeholder="Buscar comercio...">
+<div>
+  <button id="goBtn">Buscar</button>
+  <button id="clearBtn">Limpiar</button>
+  <button id="refreshBtn">Actualizar</button>
+  <button id="nearBtn">📍 Cerca</button>
+</div>
 <div id="results"></div>
 
 <script>
 const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-let DATA=[];
+let DATA=[],POS=null;
 
 function parseCSV(txt){
   const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
   const head=rows.shift().map(h=>h.trim().toLowerCase());
   return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
-
 function render(arr){
   const box=document.getElementById("results");
   box.innerHTML=(arr||[]).map(r=>`
@@ -36,21 +41,43 @@ function render(arr){
       ${r.imagen_url?`<img src="${r.imagen_url}" style="max-height:100px;border-radius:8px;margin-top:6px">`:""}
     </div>`).join("")||"<p>Sin resultados</p>";
 }
+function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+function distKm(a,b){const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLon=t(b.lng-a.lng);
+  const s1=Math.sin(dLat/2),s2=Math.sin(dLon/2);
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(s1*s1+Math.cos(t(a.lat))*Math.cos(t(b.lat))*s2*s2)));
+}
 
 async function loadCSV(){
   const t=await fetch(CSV).then(r=>r.text());
   DATA=parseCSV(t);
-  render(DATA.slice(0,5)); // muestra solo los primeros 5 al iniciar
+  render(DATA.slice(0,5));
 }
-function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
-
-document.getElementById("q").addEventListener("keydown",e=>{
-  if(e.key==="Enter"){
-    const val=norm(e.target.value);
-    const res=DATA.filter(r=>norm(r.nombre_local).includes(val)||norm(r.rubro).includes(val)||norm(r.direccion).includes(val));
+function buscar(qv){
+  if(!DATA.length)return;
+  const w=norm(qv);
+  if(!w){render(DATA.slice(0,5));return;}
+  let res=DATA.filter(r=>norm(r.nombre_local).includes(w)||norm(r.rubro).includes(w)||norm(r.direccion).includes(w));
+  render(res);
+}
+function buscarCerca(){
+  if(!navigator.geolocation){alert("Geolocalización no disponible");return;}
+  navigator.geolocation.getCurrentPosition(pos=>{
+    POS={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    const res=DATA.map(r=>{
+      const lat=+r.lat,lng=+r.lng;
+      if(!isFinite(lat)||!isFinite(lng))return null;
+      const d=distKm(POS,{lat,lng});
+      return {...r,dist:d};
+    }).filter(r=>r&&r.dist<=1.5).sort((a,b)=>a.dist-b.dist);
     render(res);
-  }
-});
+  },()=>alert("No se pudo obtener ubicación"));
+}
+
+document.getElementById("goBtn").onclick=()=>buscar(document.getElementById("q").value);
+document.getElementById("clearBtn").onclick=()=>{document.getElementById("q").value="";render(DATA.slice(0,5));};
+document.getElementById("refreshBtn").onclick=()=>loadCSV();
+document.getElementById("nearBtn").onclick=buscarCerca;
+document.getElementById("q").addEventListener("keydown",e=>{if(e.key==="Enter")buscar(e.target.value);});
 
 loadCSV();
 </script>
