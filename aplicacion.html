@@ -39,12 +39,22 @@ footer{font-size:12px;color:#93a0b4;padding:10px;border-top:1px solid #1f2430}
 <footer>vFinal • búsqueda por texto o voz • carga bajo demanda</footer>
 
 <script>
-const DATA_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRHgY8F6D3kqdlXoYMdG1qGxD4zEJ8qkE-mGbDhbv8vWuhA1-bhQ9dUoPq_hl8pL3w/pub?output=csv";
+const DATA_URL="https://docs.google.com/spreadsheets/d/1dsfcGFTmaWNkKo7ZHORK1Ms8ognxDWF5/gviz/tq?tqx=out:csv&gid=841839425";
 let DATA=[];
 const estado=t=>{document.getElementById("estado").textContent=t;console.log(t);};
 
 async function cargarCSV(){
   estado("Cargando CSV…");
-  const r=await fetch(DATA_URL+"&nocache="+Date.now());
-  const t=await r.text();
-  const l=t.split(/\r?\n/).filter(x=>x.trim()!=="").map(a=>a.split("
+  try{
+    const res=await fetch(DATA_URL+"&nocache="+Date.now());
+    const text=await res.text();
+    const rows=text.split(/\r?\n/).filter(l=>l.trim()!=="").map(l=>l.split(","));
+    const head=rows.shift().map(h=>h.trim().toLowerCase());
+    const idx=k=>head.findIndex(h=>h.includes(k));
+    DATA=rows.map(r=>({
+      nombre:r[idx("nombre")]||"",
+      categoria:r[idx("categoria")]||"",
+      barrio:r[idx("barrio")]||"",
+      direccion:r[idx("direccion")]||"",
+      lat:parseFloat(r[idx("lat")])||null,
+      l
