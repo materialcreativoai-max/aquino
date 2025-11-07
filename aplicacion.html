@@ -3,31 +3,56 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Prueba mínima — Aquí Nomás</title>
+<title>Prueba búsqueda — Aquí Nomás</title>
 <style>
 body{background:#121418;color:#e6e9ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:30px}
-button{padding:10px 14px;margin-top:12px;border:none;border-radius:8px;background:#0b5cff;color:#fff;cursor:pointer}
-#out{margin-top:20px;text-align:left;white-space:pre-wrap}
+input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;border-radius:8px;background:#1b1f26;color:#e6e9ee}
+button{padding:10px 14px;margin:4px;border:none;border-radius:8px;background:#0b5cff;color:#fff;cursor:pointer;font-weight:600}
+.card{background:#1b1f26;border:1px solid #1f232b;border-radius:10px;padding:12px;margin:10px auto;max-width:700px;text-align:left}
+.card b{color:#0b5cff}
 </style>
 </head>
 <body>
-<h1>Prueba mínima — CSV</h1>
-<p>Si ves texto debajo, el script se ejecuta.</p>
-<button id="go">Cargar datos</button>
-<div id="out">Esperando...</div>
+<h1>Prueba de búsqueda</h1>
+<input id="q" placeholder="Escribí un nombre o rubro y presioná Enter">
+<div id="results"></div>
 
 <script>
-document.getElementById("go").onclick=async()=>{
-  const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-  document.getElementById("out").textContent="Leyendo CSV...";
-  try{
-    const t=await fetch(CSV).then(r=>r.text());
-    const lines=t.split(/\r?\n/).slice(0,5).join("\n");
-    document.getElementById("out").textContent="Primeras líneas del CSV:\n\n"+lines;
-  }catch(e){
-    document.getElementById("out").textContent="Error: "+e;
+const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+let DATA=[];
+
+function parseCSV(txt){
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
+  const head=rows.shift().map(h=>h.trim().toLowerCase());
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
+
+function render(arr){
+  const box=document.getElementById("results");
+  box.innerHTML=(arr||[]).map(r=>`
+    <div class="card">
+      <b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
+      ${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
+      ${r.imagen_url?`<img src="${r.imagen_url}" style="max-height:100px;border-radius:8px;margin-top:6px">`:""}
+    </div>`).join("")||"<p>Sin resultados</p>";
+}
+
+async function loadCSV(){
+  const t=await fetch(CSV).then(r=>r.text());
+  DATA=parseCSV(t);
+  render(DATA.slice(0,5)); // muestra solo los primeros 5 al iniciar
+}
+function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+
+document.getElementById("q").addEventListener("keydown",e=>{
+  if(e.key==="Enter"){
+    const val=norm(e.target.value);
+    const res=DATA.filter(r=>norm(r.nombre_local).includes(val)||norm(r.rubro).includes(val)||norm(r.direccion).includes(val));
+    render(res);
   }
-};
+});
+
+loadCSV();
 </script>
 </body>
 </html>
