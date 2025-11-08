@@ -40,7 +40,7 @@ footer{font-size:12px;color:#93a0b4;padding:10px;border-top:1px solid #1f2430}
 
 <script>
 const DATA_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-let DATA=[],LOADED=false;
+let DATA=[], LOADED=false;
 
 const $=s=>document.querySelector(s);
 const estado=t=>{$('#estado').textContent=t;console.log(t);};
@@ -49,8 +49,9 @@ async function cargarCSV(){
   estado("Cargando CSV…");
   try{
     const res=await fetch(DATA_URL+"&nocache="+Date.now(),{cache:"no-store"});
+    if(!res.ok) throw new Error(res.status);
     const text=await res.text();
-    const rows=text.split(/\r?\n/).filter(l=>l.trim()!=="").map(l=>l.split(","));
+    const rows=text.split(/\r?\n/).filter(l=>l.trim()!=="").map(l=>splitCSV(l));
     const head=rows.shift().map(h=>h.trim().toLowerCase());
     const idx=k=>head.findIndex(h=>h.includes(k));
     DATA=rows.map(r=>({
@@ -58,19 +59,26 @@ async function cargarCSV(){
       categoria:r[idx("categoria")]||"",
       barrio:r[idx("barrio")]||"",
       direccion:r[idx("direccion")]||"",
-      lat:parseFloat(r[idx("lat")]||"")||null,
-      lng:parseFloat(r[idx("lng")]||"")||null,
-      imagen:r[idx("imagen")]||""
+      lat:parseNum(r[idx("lat")]),
+      lng:parseNum(r[idx("lng")]),
+      imagen:(r[idx("imagen")]||"").trim()
     }));
     LOADED=true;
     estado("CSV cargado: "+DATA.length+" filas (no se muestran hasta que busques).");
-  }catch(e){estado("Error al cargar datos del Sheet.");}
+  }catch(e){console.error(e);estado("Error al cargar datos del Sheet.");}
 }
+
+function splitCSV(line){
+  const out=[], re=/(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^",]*))/g; let m;
+  while((m=re.exec(line))!==null){ out.push((m[1]||m[2]||"").replace(/""/g,'"')); }
+  return out;
+}
+function parseNum(v){ if(v==null) return null; const n=parseFloat(String(v).replace(',','.')); return isFinite(n)?n:null; }
 
 function render(lista){
   $("#resultado").innerHTML=lista.map(d=>`
     <div class="card">
-      ${d.imagen?`<img src="${d.imagen}" alt="${d.nombre}" onerror="this.remove()">`:`<div style='height:150px;display:flex;align-items:center;justify-content:center;color:#7d8aa3;'>Sin imagen</div>`}
+      ${/^https?:\/\//i.test(d.imagen)?`<img src="${d.imagen}" alt="${d.nombre}" onerror="this.remove()">`:`<div style='height:150px;display:flex;align-items:center;justify-content:center;color:#7d8aa3;'>Sin imagen</div>`}
       <h3>${d.nombre}</h3>
       <p>${d.categoria||""} ${d.barrio?"· "+d.barrio:""}</p>
       <p>${d.direccion||""}</p>
@@ -78,17 +86,45 @@ function render(lista){
   $("#vacio").style.display=lista.length?"none":"block";
 }
 
-function normalizar(s){return(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+/* BÚSQUEDA SEMÁNTICA */
+const limpiar = s => (s||"").toLowerCase()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g,"")      // sin acentos
+  .replace(/[^\p{L}\p{N}\s]/gu," ")                    // quita puntuación (.,!?)
+  .replace(/\s+/g," ").trim();
+
+const LEX = {
+  "helados":["heladeria","helado"],
+  "almorzar":["restaurante","menu","almuerzo"],
+  "comer":["restaurante","comida","menu"],
+  "cafe":["cafeteria","cafe"],
+  "cerveza":["bar","cerveceria"],
+  "postre":["heladeria","cafeteria","pasteleria"]
+};
+
+function expand(tokens){
+  const extra=[];
+  for(const t of tokens){ if(LEX[t]) extra.push(...LEX[t]); }
+  return Array.from(new Set(tokens.concat(extra)));
+}
+
 function filtrar(q){
-  const n=normalizar(q);
-  if(!n)return[];
-  const tokens=n.split(/\s+/).filter(Boolean);
+  const tokens = expand(limpiar(q).split(" ").filter(Boolean));
+  if(!tokens.length) return [];
   return DATA.filter(d=>{
-    const texto=normalizar(Object.values(d).join(" "));
+    const texto = limpiar([d.nombre,d.categoria,d.barrio,d.direccion].join(" "));
     return tokens.every(tok=>texto.includes(tok));
   });
 }
 
+/* CERCA */
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000,toRad=x=>x*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+
+/* BOTONES */
 $("#btnBuscar").onclick=async()=>{
   if(!LOADED)await cargarCSV();
   const q=$("#busqueda").value.trim();
@@ -117,13 +153,10 @@ $("#btnCerca").onclick=async()=>{
   if(!navigator.geolocation){estado("Geolocalización no disponible.");return;}
   estado("Buscando tu ubicación…");
   navigator.geolocation.getCurrentPosition(pos=>{
-    const {latitude,longitude}=pos.coords;
-    const R=6371000,toRad=g=>g*Math.PI/180,radio=600;
-    const lista=DATA.filter(d=>d.lat&&d.lng).map(d=>{
-      const dLat=toRad(d.lat-latitude),dLon=toRad(d.lng-longitude);
-      const a=Math.sin(dLat/2)**2+Math.cos(toRad(latitude))*Math.cos(toRad(d.lat))*Math.sin(dLon/2)**2;
-      const dist=2*R*Math.asin(Math.sqrt(a));
-      return{...d,dist};
+    const {latitude,longitude}=pos.coords, radio=600;
+    const lista=DATA.filter(d=>d.lat!=null&&d.lng!=null).map(d=>{
+      const dist=haversine(latitude,longitude,d.lat,d.lng);
+      return {...d,dist};
     }).filter(d=>d.dist<=radio).sort((a,b)=>a.dist-b.dist);
     render(lista);
     estado("Cerca: "+lista.length+" en "+radio+" m.");
@@ -145,7 +178,7 @@ $("#btnVoz").onclick=async()=>{
   rec.onerror=()=>estado("Error al escuchar.");
 };
 
-cargarCSV();
+estado("Listo. No se cargan comercios hasta que lo pidas.");
 </script>
 </body>
 </html>
