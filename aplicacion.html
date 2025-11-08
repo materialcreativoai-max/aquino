@@ -40,7 +40,7 @@
 <footer>vEstable • texto o voz • “Cerca” • sin autolistar</footer>
 
 <script>
-/* TU CSV PUBLICADO (no pide login) */
+/* CSV público (el que pasaste) */
 const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 
 let DATA = [];
@@ -49,7 +49,7 @@ let LOADED = false;
 const $ = s => document.querySelector(s);
 const estado = t => { $('#estado').textContent = t; console.log(t); };
 
-/* CSV parser robusto (comillas/comas) */
+/* CSV parser con soporte de comillas/comas */
 function parseCSV(text){
   const out=[], row=[]; let i=0, f="", q=false;
   while(i<text.length){
@@ -61,13 +61,12 @@ function parseCSV(text){
     }
     if(c==='"'){ q=true; i++; continue; }
     if(c===','){ row.push(f); f=""; i++; continue; }
-    if(c==='\r'){ i++; continue; }
-    if(c==='\n'){ row.push(f); out.push(row.slice()); row.length=0; f=""; i++; continue; }
+    if(c=='\r'){ i++; continue; }
+    if(c=='\n'){ row.push(f); out.push(row.slice()); row.length=0; f=""; i++; continue; }
     f+=c; i++;
   }
   if(f.length||row.length){ row.push(f); out.push(row); }
-  // limpiar vacías
-  const rows = out.filter(r => r.some(x => String(x).trim()!==''));
+  const rows = out.filter(r => r.some(x => String(x).trim()!==""));
   if(!rows.length) return {head:[], data:[]};
   const head = rows.shift().map(h=>String(h).trim().toLowerCase());
   const idx = k => head.findIndex(h=>h.includes(k));
@@ -80,7 +79,7 @@ function parseCSV(text){
     lng: parseFloat(String(r[idx('lng')]||'').replace(',','.')) || null,
     imagen: (r[idx('imagen')]||'').trim()
   }));
-  return {head,data};
+  return {head, data};
 }
 
 async function cargarCSV(){
@@ -100,7 +99,6 @@ async function cargarCSV(){
 }
 
 function imgOrPlaceholder(src, alt){
-  // Solo renderizo <img> si parece URL válida (http/https). Evito 404 de nombres tipo “helados para todos”.
   const ok = /^https?:\/\//i.test(src);
   return ok ? `<img loading="lazy" src="${src}" alt="${alt}" onerror="this.replaceWith(document.createElement('div'));this.previousSibling?.remove();">`
             : `<div class="imgbox">Sin imagen</div>`;
@@ -188,7 +186,7 @@ $('#btnVoz').onclick = async ()=>{
   rec.onerror = ()=> estado("Error al escuchar.");
 };
 
-/* Carga inicial (no lista automáticamente) */
+/* Carga inicial */
 estado('Listo. No se cargan comercios hasta que lo pidas.');
 </script>
 </body>
