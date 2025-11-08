@@ -1,146 +1,356 @@
-<!doctype html>
-<html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Galerías y Servicios</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Aquí Nomás — DEMO auto-refresh v4.11</title>
+<title>Aquí Nomás — DEMO (imágenes) v1</title>
 <style>
-body{font-family:system-ui,Arial,sans-serif;background:#0f1115;color:#e8ecf1;margin:0;text-align:center}
-header{padding:14px;border-bottom:1px solid #1f2430}
-h1{margin:0;font-size:20px}
-main{max-width:900px;margin:auto;padding:20px}
-input{padding:10px 12px;border-radius:8px;border:1px solid #273042;background:#0d0f14;color:#e8ecf1;width:70%}
-button{padding:10px 14px;border-radius:10px;border:1px solid #273042;background:#10151e;color:#e8ecf1;cursor:pointer;margin:6px}
-button:hover{border-color:#3a475e}
-#resultado{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:20px}
-.card{background:#171a21;border:1px solid #232838;border-radius:14px;padding:10px}
-.card img{width:100%;height:150px;object-fit:cover;border-radius:10px}
-.empty{border:1px dashed #273042;border-radius:14px;padding:20px;margin-top:20px;color:#aab3c3}
-footer{font-size:12px;color:#93a0b4;padding:10px;border-top:1px solid #1f2430}
+:root{--pri:#0b5cff;}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
+.wrap{max-width:880px;margin:0 auto;padding:18px}
+.wrap{max-width:900px;margin:0 auto;padding:18px}
+h1{font-size:20px;margin:0 0 14px}
+.box{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:14px;margin:0 0 14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@@ -17,17 +18,18 @@
+.btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
+.btn.mic{border:1px dashed var(--pri);background:#eef3ff}
+.tiny{font-size:12px;color:#667}
+.card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0}
+.title{font-weight:700;margin-bottom:4px}
+.card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0;overflow:hidden}
+.title{font-weight:700;margin:8px 0 4px}
+.title span{font-weight:600;color:#555}
+.meta{font-size:12px;color:#566}
+.thumb{width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:10px;background:#f1f3f7;display:block}
+.err{padding:8px 10px;background:#fff3f3;border:1px solid #ffd2d2;border-radius:10px;margin-bottom:12px;color:#7a1a1a}
+.ok{padding:8px 10px;background:#eef9f1;border:1px solid #cfead8;border-radius:10px;margin-bottom:12px;color:#145a32}
 </style>
 </head>
 <body>
-<header><h1>Galerías y Servicios</h1></header>
+<div class="wrap">
+  <h1>🏷️ Aquí Nomás — DEMO auto-refresh v4.11</h1>
+  <h1>🏷️ Aquí Nomás — DEMO (imágenes)</h1>
+  <div id="status" class="ok" style="display:none"></div>
+  <div id="error" class="err" style="display:none"></div>
 
-<main>
-  <p id="estado">Listo. No se cargan comercios hasta que lo pidas.</p>
-  <input id="busqueda" type="text" placeholder="Escribí o hablá para buscar…">
-  <div>
-    <button id="btnBuscar">Buscar</button>
-    <button id="btnVoz">🎤 Voz</button>
-    <button id="btnCerca">Cerca</button>
-    <button id="btnActualizar">Actualizar</button>
-    <button id="btnLimpiar">Limpiar</button>
-  </div>
-  <section id="resultado"></section>
-  <div id="vacio" class="empty" style="display:none;">Sin resultados.</div>
-</main>
-
-<footer>vFinal • búsqueda por texto o voz • carga bajo demanda</footer>
+@@ -47,36 +49,40 @@ <h1>🏷️ Aquí Nomás — DEMO auto-refresh v4.11</h1>
+</div>
 
 <script>
-const DATA_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-let DATA=[];
-const estado=t=>{document.getElementById("estado").textContent=t;console.log(t);};
+const qs=(k)=>new URLSearchParams(location.search).get(k);
+const CSV_PARAM=qs('csv');
+const CSV_FALLBACK="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+/* === Config CSV === */
+const qs = (k)=>new URLSearchParams(location.search).get(k);
+const CSV_PARAM = qs('csv');
+const CSV_FALLBACK = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+const BASE_CSV = CSV_PARAM || CSV_FALLBACK;
+const STREET_ANCHORS = ["santafe","9dejulio","corrientes"];
 
-async function cargarCSV(){
-  estado("Cargando CSV…");
-  try{
-    const res=await fetch(DATA_URL+"&nocache="+Date.now());
-    if(!res.ok)throw new Error("HTTP "+res.status);
-    const text=await res.text();
-    const rows=text.split(/\r?\n/).filter(l=>l.trim()!=="").map(l=>l.split(","));
-    const head=rows.shift().map(h=>h.trim().toLowerCase());
-    const idx=k=>head.findIndex(h=>h.includes(k));
-    DATA=rows.map(r=>({
-      nombre:r[idx("nombre")]||"",
-      categoria:r[idx("categoria")]||"",
-      barrio:r[idx("barrio")]||"",
-      direccion:r[idx("direccion")]||"",
-      lat:parseFloat(r[idx("lat")])||null,
-      lng:parseFloat(r[idx("lng")])||null,
-      imagen:r[idx("imagen")]||""
-    }));
-    estado("CSV cargado: "+DATA.length+" filas (no se muestran hasta que busques).");
-  }catch(e){
-    console.error(e);
-    estado("Error al cargar datos del Sheet.");
+function removeDiacritics(str){return str.normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function aliasPhrases(s){
+  return s
+    .replace(/\bsanta\s+fe\b/g,"santafe")
+    .replace(/\bsan\s+nicolas\b/g,"sannicolas")
+    .replace(/\b9\s*de\s*julio\b/g,"9dejulio");
+/* === Normalización === */
+function removeDiacritics(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function aliasPhrases(s){return s
+  .replace(/\bsanta\s+fe\b/g,'santafe')
+  .replace(/\bsan\s+nicolas\b/g,'sannicolas')
+  .replace(/\b9\s*de\s*julio\b/g,'9dejulio');
+}
+const normRaw = s => aliasPhrases(removeDiacritics(String(s||"").toLowerCase()));
+const norm = s => normRaw(s).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+const normRaw = s => aliasPhrases(removeDiacritics(String(s||'').toLowerCase()));
+const norm = s => normRaw(s).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+
+/* === CSV === */
+function parseCSV(txt){
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
+  const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\s+/g,"_"));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||'').trim()])));
+}
+function csvURL(){return BASE_CSV + (BASE_CSV.includes('?')?'&':'?') + 'v=' + Date.now();}
+
+/* === Geo === */
+function parseCoord(v){
+  if(!v)return NaN;
+  let s=String(v).trim().replace(/,/g,'.');
+  let n=Number(s);
+  if(Number.isNaN(n)){
+    const digits=s.replace(/[^0-9]/g,'');
+    if(digits.length>=7){n=parseInt(digits,10)/1e6;if(/^[-]/.test(s))n=-Math.abs(n);}
+    const d=s.replace(/[^0-9]/g,'');
+    if(d.length>=7){ n=parseInt(d,10)/1e6; if(/^[-]/.test(s)) n=-Math.abs(n); }
   }
+  if(Math.abs(n)>180)n/=1e6;
+  if(Math.abs(n)>180) n/=1e6;
+  return n;
+}
+function haversineKm(a,b){
+@@ -87,64 +93,66 @@ <h1>🏷️ Aquí Nomás — DEMO auto-refresh v4.11</h1>
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
 
-function render(lista){
-  const cont=document.getElementById("resultado");
-  cont.innerHTML=lista.map(d=>`
-  <div class="card">
-    ${d.imagen?`<img src="${d.imagen}" alt="${d.nombre}" onerror="this.remove()">`
-      :`<div style='height:150px;display:flex;align-items:center;justify-content:center;color:#7d8aa3;'>Sin imagen</div>`}
-    <h3>${d.nombre}</h3>
-    <p>${d.categoria||""} ${d.barrio?"· "+d.barrio:""}</p>
-    <p>${d.direccion||""}</p>
-  </div>`).join("");
-  document.getElementById("vacio").style.display=lista.length?"none":"block";
+// estado
+let DATA=[],IDX=[],USER_POS=null,NEAR=false,LOADED=false;
+function csvURL(){ return BASE_CSV + (BASE_CSV.includes('?')?'&':'?') + 'v=' + Date.now(); }
+/* === Estado === */
+let DATA=[], IDX=[], USER_POS=null, NEAR=false, LOADED=false;
+const STREET_ANCHORS=['santafe','9dejulio','corrientes'];
+const STOP=new Set(['hola','buenas','busco','un','una','el','la','en','por','a','al','del','las','los']);
+const BARRIOS=['microcentro','centro','recoleta','palermo','belgrano','caballito','flores','retiro','san nicolas','monserrat','balvanera','almagro','boedo','san telmo','barracas','constitucion','chacarita','villa crespo','colegiales','nunez','saavedra','parque patricios','parque chas'];
+
+/* === Carga CSV === */
+function loadCSV(){
+  document.getElementById('status').style.display='block';
+  document.getElementById('status').textContent='Cargando CSV…';
+  return fetch(csvURL(),{cache:"no-store"})
+   .then(r=>r.text())
+   .then(t=>{
+      if(/^\s*<!doctype/i.test(t))throw new Error("El enlace no devolvió CSV (HTML).");
+  const st=document.getElementById('status');
+  st.style.display='block'; st.textContent='Cargando CSV…';
+  return fetch(csvURL(),{cache:'no-store'})
+    .then(r=>r.text())
+    .then(t=>{
+      if(/^\s*<!doctype/i.test(t)) throw new Error('El enlace no devolvió CSV (HTML).');
+      DATA=parseCSV(t);
+      IDX=DATA.map(row=>{
+        const nombre=norm(row.nombre_local||row.nombre||row.local||"");
+        const rubro=norm(row.rubro||"");
+        const kw=norm((row.keywords||"")+" "+(row.nombre_local||row.nombre||"")+" "+(row.rubro||"")+" "+(row.barrio||""));
+        const dirbar=norm((row.direccion||"")+" "+(row.barrio||""));
+        const lat=parseCoord(row.lat),lng=parseCoord(row.lng);
+        return{nombre,rubro,kw,dirbar,lat,lng};
+        const nombre=norm(row.nombre_local||row.nombre||row.local||'');
+        const rubro=norm(row.rubro||'');
+        const kw=norm((row.keywords||'')+' '+(row.nombre_local||row.nombre||'')+' '+(row.rubro||'')+' '+(row.barrio||''));
+        const dirbar=norm((row.direccion||'')+' '+(row.barrio||''));
+        const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
+        // también guardo imagen_url cruda para render
+        const img=(row.imagen_url||'').trim().replace(/^"+|"+$/g,'');
+        return {nombre,rubro,kw,dirbar,lat,lng,img};
+      });
+      document.getElementById('status').textContent="CSV cargado OK · filas: "+DATA.length;
+      st.textContent='CSV cargado OK · filas: ' + DATA.length;
+      LOADED=true;
+   })
+   .catch(e=>{
+    })
+    .catch(e=>{
+      const el=document.getElementById('error'); el.style.display='block';
+      el.textContent="No se pudo leer el CSV. "+(e.message||e);
+   });
+      el.textContent='No se pudo leer el CSV. '+(e.message||e);
+    });
 }
 
-function filtrar(q){
-  const n=q.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-  return DATA.filter(d=>Object.values(d).join(" ").toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes(n));
+// helpers búsqueda
+const STOP=new Set(["hola","buenas","busco","un","una","el","la","en","por","a","al","del","las","los"]);
+const BARRIOS=["microcentro","centro","recoleta","palermo","belgrano","caballito","flores","retiro","san nicolas","monserrat","balvanera","almagro","boedo","san telmo","barracas","constitucion","chacarita","villa crespo","colegiales","nunez","saavedra","parque patricios","parque chas"];
+
+/* === Buscador === */
+function tokenize(raw){
+  const qn = norm(raw);
+  const qn=norm(raw);
+  let t=qn.split(/\s+/).filter(w=>!STOP.has(w));
+  t=t.filter(w=>w.length>=3);
+  const extra=[];
+  if(t.includes("almorzar")||t.includes("almuerzo"))extra.push("almuerzo","menu","comida","gastronomia","restaurante");
+  if(t.includes("centro"))extra.push("microcentro","centro");
+  if(t.includes('almorzar')||t.includes('almuerzo')) extra.push('almuerzo','menu','comida','gastronomia','restaurante');
+  if(t.includes('centro')) extra.push('microcentro','centro');
+  return Array.from(new Set(t.concat(extra)));
+}
+function detectBarrio(q){
+  for(const b of BARRIOS){ if(q.includes(b)) return b; }
+  const m=q.match(/\ben\s+([a-z0-9\s]{3,})$/);
+  return m?m[1].trim():"";
+  return m?m[1].trim():'';
+}
+function barrioMatch(dirbar,barrioTerm){
+  if(!barrioTerm) return true;
+  if(barrioTerm==="centro") return dirbar.includes("centro")||dirbar.includes("microcentro");
+  return dirbar.includes(barrioTerm);
+function barrioMatch(dirbar,b){
+  if(!b) return true;
+  if(b==='centro') return dirbar.includes('centro')||dirbar.includes('microcentro');
+  return dirbar.includes(b);
 }
 
-document.getElementById("btnBuscar").onclick=()=>{
-  const q=document.getElementById("busqueda").value.trim();
-  if(!q){estado("Escribí algo o usá el micrófono.");return;}
-  const r=filtrar(q);
-  render(r);
-  estado("Buscar: "+r.length+" encontrado(s).");
-};
+// UI
+/* === UI === */
+document.getElementById('goBtn').addEventListener('click',()=>buscar('text'));
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  document.getElementById('qall').value="";
+  document.getElementById('results').innerHTML="";
+  document.getElementById('qall').value='';
+  document.getElementById('results').innerHTML='';
+  document.getElementById('gpsHint').style.display='none';
+  NEAR=false;
+});
+@@ -153,54 +161,58 @@ <h1>🏷️ Aquí Nomás — DEMO auto-refresh v4.11</h1>
+});
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar('text');}});
+document.getElementById('locBtn').addEventListener('click',()=>{
+  const after = ()=>{ NEAR=true; buscar('nearbutton'); };
+  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; after(); return; }
+  const go=()=>{ NEAR=true; buscar('nearbutton'); };
+  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; go(); return; }
+  navigator.geolocation.getCurrentPosition(
+    p=>{ USER_POS={lat:p.coords.latitude,lng:p.coords.longitude}; after(); },
+    ()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; after(); },
+    p=>{ USER_POS={lat:p.coords.latitude,lng:p.coords.longitude}; go(); },
+    ()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; go(); },
+    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
+  );
+});
 
-document.getElementById("btnLimpiar").onclick=()=>{
-  document.getElementById("busqueda").value="";
-  render([]);
-  document.getElementById("vacio").style.display="none";
-  estado("Limpio. Nada en pantalla hasta que busques.");
-};
-
-document.getElementById("btnActualizar").onclick=()=>{
-  cargarCSV().then(()=>{render([]);document.getElementById("vacio").style.display="none";});
-};
-
-document.getElementById("btnCerca").onclick=()=>{
-  if(!navigator.geolocation){estado("Geolocalización no disponible.");return;}
-  estado("Buscando tu ubicación…");
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const {latitude,longitude}=pos.coords;
-    const R=6371000,toRad=g=>g*Math.PI/180;
-    const lista=DATA.filter(d=>d.lat&&d.lng).map(d=>{
-      const dLat=toRad(d.lat-latitude),dLon=toRad(d.lng-longitude);
-      const a=Math.sin(dLat/2)**2+Math.cos(toRad(latitude))*Math.cos(toRad(d.lat))*Math.sin(dLon/2)**2;
-      const dist=2*R*Math.asin(Math.sqrt(a));
-      return {...d,dist};
-    }).filter(d=>d.dist<=600).sort((a,b)=>a.dist-b.dist);
-    render(lista);
-    estado("Cerca: "+lista.length+" en 600 m.");
-  },()=>estado("No se pudo obtener la ubicación."));
-};
-
-document.getElementById("btnVoz").onclick=()=>{
+// mic
+/* === Mic === */
+(function(){
+  const b=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){estado("Tu navegador no admite reconocimiento de voz.");return;}
-  const rec=new SR();
-  rec.lang="es-ES";
-  rec.start();
-  estado("Escuchando…");
+  if(!SR){b.disabled=true;b.innerText='🎤—';return;}
+  const rec=new SR();rec.lang='es-AR';
+  b.addEventListener('click',()=>{try{rec.start();b.innerText='⏺️';}catch(e){}});
+  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=aliasPhrases(removeDiacritics(t.toLowerCase()));buscar('text');};
+  rec.onend=()=>{b.innerText='🎤';};
+  if(!SR){ b.disabled=true; b.innerText='🎤—'; return; }
+  const rec=new SR(); rec.lang='es-AR';
+  b.addEventListener('click',()=>{ try{rec.start(); b.innerText='⏺️';}catch(e){} });
   rec.onresult=e=>{
-    const txt=e.results[0][0].transcript;
-    document.getElementById("busqueda").value=txt;
-    const r=filtrar(txt);
-    render(r);
-    estado("Voz: '"+txt+"' → "+r.length+" resultado(s).");
+    const t=e.results[0][0].transcript||'';
+    document.getElementById('qall').value=aliasPhrases(removeDiacritics(t.toLowerCase()));
+    buscar('text');
   };
-  rec.onerror=()=>estado("Error al escuchar.");
-};
+  rec.onend=()=>{ b.innerText='🎤'; };
+})();
 
-cargarCSV();
+// NEAR
+/* === CERCA === */
+function parseNearList(){
+  const withDist = DATA.map((row,i)=>{
+    const M=IDX[i];
+    if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
+    const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
+    return {row,i,dist:d};
+    return {row:DATA[i],i,dist:d,idx:M};
+  }).filter(Boolean).sort((a,b)=>a.dist-b.dist);
+
+  let radius=1.5;
+  let inside=withDist.filter(o=>o.dist<=radius);
+  if(inside.length<3){radius=2.0;inside=withDist.filter(o=>o.dist<=radius);}
+  if(inside.length<3){radius=3.0;inside=withDist.filter(o=>o.dist<=radius);}
+  if(inside.length<3){ radius=2.0; inside=withDist.filter(o=>o.dist<=radius); }
+  if(inside.length<3){ radius=3.0; inside=withDist.filter(o=>o.dist<=radius); }
+
+  const gh=document.getElementById('gpsHint');
+  gh.style.display='block';
+  gh.textContent="📍 Cercanos dentro de "+radius.toFixed(1)+" km · "+inside.length+" resultados";
+  gh.textContent='📍 Cercanos dentro de '+radius.toFixed(1)+' km · '+inside.length+' resultados';
+  return inside.slice(0,40);
+}
+
+// buscar
+/* === Buscar === */
+function buscar(source){
+  if(!LOADED){alert("Esperá que cargue el CSV…");return;}
+  const raw=document.getElementById('qall').value||"";
+  if(!LOADED){ alert('Esperá que cargue el CSV…'); return; }
+  const raw=document.getElementById('qall').value||'';
+  const qnorm=norm(raw);
+  const toks=tokenize(raw);
+  const barrioQ=detectBarrio(qnorm);
+  const rubroT=toks.find(t=>["gastronomia","libreria","ferreteria","farmacia","kiosco","cafe","panaderia","verduleria","floreria","costureria","heladeria"].includes(t));
+  const rubroT=toks.find(t=>['gastronomia','libreria','ferreteria','farmacia','kiosco','cafe','panaderia','verduleria','floreria','costureria','heladeria'].includes(t));
+
+  if(source==='text' && !/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
+  if(/\bcerca(s|nos)?\b/.test(qnorm)){ if(!USER_POS) USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; }
+@@ -210,27 +222,26 @@ <h1>🏷️ Aquí Nomás — DEMO auto-refresh v4.11</h1>
+    return render(arr.length?arr:[], arr.length?null:'No hay locales cercanos en el radio.');
+  }
+
+  // anclas de calle (santafe / 9dejulio / corrientes) sin rubro/barrio → exigir match exacto
+  const anchor = STREET_ANCHORS.find(a => qnorm.includes(a));
+  if (anchor && !rubroT && !barrioQ) {
+    NEAR = false;
+    const arr = DATA.map((row,i)=>({row,i})).filter(o => IDX[o.i].dirbar.includes(anchor));
+    return render(arr.length ? arr : [], arr.length ? null : `No se encontraron resultados sobre ${anchor.replace('9dejulio','9 de julio')}.`);
+  const anchor = STREET_ANCHORS.find(a=>qnorm.includes(a));
+  if(anchor && !rubroT && !barrioQ){
+    NEAR=false;
+    const arr = DATA.map((row,i)=>({row,i,idx:IDX[i]}))
+                    .filter(o=>o.idx.dirbar.includes(anchor));
+    return render(arr.length?arr:[], arr.length?null:'No se encontraron resultados sobre '+anchor.replace('9dejulio','9 de julio')+'.');
+  }
+
+  if(rubroT && barrioQ){
+    const arr=DATA.map((row,i)=>({row,i})).filter(o=>{
+      const M=IDX[o.i];
+      return M.rubro.includes(rubroT) && barrioMatch(M.dirbar,barrioQ);
+    });
+    const arr=DATA.map((row,i)=>({row,i,idx:IDX[i]}))
+                  .filter(o=>o.idx.rubro.includes(rubroT) && barrioMatch(o.idx.dirbar,barrioQ));
+    if(!arr.length) return render([],`No se encontraron resultados para ${rubroT} en ${barrioQ}.`);
+    return render(arr);
+  }
+
+  let arr=DATA.map((row,i)=>({row,i,score:0}));
+  if(toks.length){
+  let arr=DATA.map((row,i)=>({row,i,idx:IDX[i],score:0}));
+  const hasTokens = toks.length>0;
+  if(hasTokens){
+    arr=arr.map(o=>{
+      const M=IDX[o.i]; let s=0;
+      const M=o.idx; let s=0;
+      toks.forEach(t=>{
+        if(M.nombre.includes(t))s+=3;
+        if(M.kw.includes(t))s+=2;
+@@ -244,26 +255,37 @@ <h1>🏷️ Aquí Nomás — DEMO auto-refresh v4.11</h1>
+  render(arr.slice(0,40));
+}
+
+/* === Render === */
+function safeImg(u){
+  if(!u) return '';
+  const s=String(u).trim().replace(/^"+|"+$/g,''); // limpia comillas sueltas
+  if(!/^https?:\/\//i.test(s)) return '';
+  return s + (s.includes('?') ? '&' : '?') + 't=' + Date.now()%999999; // cache-buster suave
+}
+function render(arr,msg){
+  const box=document.getElementById('results');
+  if(!arr.length){box.innerHTML=`<div class="tiny">${msg||'Sin resultados.'}</div>`;return;}
+  if(!arr.length){ box.innerHTML=`<div class="tiny">${msg||'Sin resultados.'}</div>`; return; }
+  box.innerHTML=arr.map(o=>{
+    const r=o.row;
+    const idx=o.idx || {};
+    const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
+    const maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((r.direccion||'')+' '+(r.barrio||''));
+    const dist=(typeof o.dist==='number'&&isFinite(o.dist))?`<div class="meta">≈ ${(o.dist*10).toFixed(0)} cuadras</div>`:'';
+    const imgURL=safeImg(r.imagen_url || idx.img);
+    const imgTag = imgURL ? `<img class="thumb" loading="lazy" src="${imgURL}" alt="${name}" onerror="this.style.display='none'">` : '';
+    return `<div class="card">
+      ${imgTag}
+      <div class="title">${name} — <span>${r.rubro||''}</span></div>
+      <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
+      ${dist}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
+      </div>
+    </div>`;
+  }).join("");
+  }).join('');
+}
+
+// carga inicial
+/* === Init === */
+loadCSV();
 </script>
 </body>
-</html>
