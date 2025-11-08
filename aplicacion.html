@@ -39,107 +39,138 @@ footer{font-size:12px;color:#93a0b4;padding:10px;border-top:1px solid #1f2430}
 <footer>vFinal • búsqueda por texto o voz • carga bajo demanda</footer>
 
 <script>
-const DATA_URL="https://docs.google.com/spreadsheets/d/1dsfcGFTmaWNkKo7ZHORK1Ms8ognxDWF5/export?format=csv&gid=841839425";
-let DATA=[];
-const estado=t=>{document.getElementById("estado").textContent=t;console.log(t);};
+/* FUENTE DE DATOS: tu Google Sheet "Locales" */
+const DATA_URL = "https://docs.google.com/spreadsheets/d/1dsfcGFTmaWNkKo7ZHORK1Ms8ognxDWF5/export?format=csv&gid=841839425";
 
+let DATA = [];
+const $ = s => document.querySelector(s);
+const estado = t => { $('#estado').textContent = t; console.log(t); };
+
+/* CSV parser robusto (comillas y comas dentro de campos) */
+function parseCSV(text){
+  const rows=[]; let i=0, field='', row=[], inQ=false;
+  while(i<text.length){
+    const c=text[i];
+    if(inQ){
+      if(c==='"' && text[i+1]==='"'){ field+='"'; i+=2; continue; }
+      if(c==='"'){ inQ=false; i++; continue; }
+      field+=c; i++; continue;
+    }
+    if(c===',' ){ row.push(field); field=''; i++; continue; }
+    if(c==='"'){ inQ=true; i++; continue; }
+    if(c==='\r'){ i++; continue; }
+    if(c==='\n'){ row.push(field); rows.push(row); field=''; row=[]; i++; continue; }
+    field+=c; i++;
+  }
+  row.push(field); rows.push(row);
+
+  // limpiar filas vacías
+  const clean = rows.filter(r => r.some(x => String(x).trim()!==''));
+  const head = clean.shift().map(h=>String(h).trim().toLowerCase());
+  const idx = key => head.findIndex(h => h.includes(key));
+
+  return clean.map(r=>({
+    nombre: r[idx('nombre')]||'',
+    categoria: r[idx('categoria')]||'',
+    barrio: r[idx('barrio')]||'',
+    direccion: r[idx('direccion')]||'',
+    lat: parseFloat((r[idx('lat')]||'').replace(',','.')) || null,
+    lng: parseFloat((r[idx('lng')]||'').replace(',','.')) || null,
+    imagen: r[idx('imagen')]||''
+  }));
+}
+
+/* CARGA de datos (sin mostrar hasta que pidas) */
 async function cargarCSV(){
   estado("Cargando CSV…");
   try{
-    const res=await fetch(DATA_URL+"&nocache="+Date.now());
-    if(!res.ok){throw new Error("HTTP "+res.status)}
-    const text=await res.text();
-    const rows=text.split(/\r?\n/).filter(l=>l.trim()!=="").map(l=>l.split(","));
-    if(!rows.length){estado("CSV cargado: 0 filas (revisá el Sheet)."); return;}
-    const head=rows.shift().map(h=>h.trim().toLowerCase());
-    const idx=k=>head.findIndex(h=>h.includes(k));
-    DATA=rows.map(r=>({
-      nombre:r[idx("nombre")]||"",
-      categoria:r[idx("categoria")]||"",
-      barrio:r[idx("barrio")]||"",
-      direccion:r[idx("direccion")]||"",
-      lat:parseFloat(r[idx("lat")])||null,
-      lng:parseFloat(r[idx("lng")])||null,
-      imagen:r[idx("imagen")]||""
-    }));
-    estado("CSV cargado: "+DATA.length+" filas (no se muestran hasta que busques).");
+    const res = await fetch(DATA_URL + "&nocache=" + Date.now(), {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const txt = await res.text();
+    DATA = parseCSV(txt);
+    estado("CSV cargado: " + DATA.length + " filas (no se muestran hasta que busques).");
   }catch(e){
     console.error(e);
     estado("Error al cargar datos del Sheet.");
   }
 }
 
+/* RENDER */
 function render(lista){
-  const cont=document.getElementById("resultado");
-  cont.innerHTML=lista.map(d=>`
-  <div class="card">
-    ${d.imagen?`<img src="${d.imagen}" alt="${d.nombre}" onerror="this.remove()">`
-      :`<div style='height:150px;display:flex;align-items:center;justify-content:center;color:#7d8aa3;'>Sin imagen</div>`}
-    <h3>${d.nombre}</h3>
-    <p>${d.categoria||""} ${d.barrio?"· "+d.barrio:""}</p>
-    <p>${d.direccion||""}</p>
-  </div>`).join("");
-  document.getElementById("vacio").style.display=lista.length?"none":"block";
+  $('#resultado').innerHTML = lista.map(d => `
+    <div class="card">
+      ${d.imagen ? `<img src="${d.imagen}" alt="${d.nombre}" onerror="this.remove()">`
+                  : `<div style="height:150px;display:flex;align-items:center;justify-content:center;color:#7d8aa3;">Sin imagen</div>`}
+      <h3>${d.nombre}</h3>
+      <p>${d.categoria||""} ${d.barrio ? "· "+d.barrio : ""}</p>
+      <p>${d.direccion||""}</p>
+    </div>`).join('');
+  $('#vacio').style.display = lista.length ? 'none' : 'block';
 }
 
+/* BUSCADOR (texto/voz) */
+const normalizar = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 function filtrar(q){
-  const n=q.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-  return DATA.filter(d=>Object.values(d).join(" ").toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes(n));
+  const n = normalizar(q);
+  return DATA.filter(d => normalizar(Object.values(d).join(' ')).includes(n));
 }
 
-document.getElementById("btnBuscar").onclick=()=>{
-  const q=document.getElementById("busqueda").value.trim();
-  if(!q){estado("Escribí algo o usá el micrófono.");return;}
-  const r=filtrar(q);
+/* ACCIONES */
+$('#btnBuscar').onclick = ()=>{
+  const q = $('#busqueda').value.trim();
+  if(!q){ estado("Escribí algo o usá el micrófono."); return; }
+  const r = filtrar(q);
   render(r);
-  estado("Buscar: "+r.length+" encontrado(s).");
+  estado("Buscar: " + r.length + " encontrado(s).");
 };
 
-document.getElementById("btnLimpiar").onclick=()=>{
-  document.getElementById("busqueda").value="";
+$('#btnLimpiar').onclick = ()=>{
+  $('#busqueda').value = '';
   render([]);
-  document.getElementById("vacio").style.display="none";
-  estado("Limpio. Nada en pantalla hasta que busques.");
+  $('#vacio').style.display='none';
+  estado('Limpio. Nada en pantalla hasta que busques.');
 };
 
-document.getElementById("btnActualizar").onclick=()=>{
-  cargarCSV().then(()=>{render([]);document.getElementById("vacio").style.display="none";});
+$('#btnActualizar').onclick = ()=>{
+  cargarCSV().then(()=>{ render([]); $('#vacio').style.display='none'; });
 };
 
-document.getElementById("btnCerca").onclick=()=>{
-  if(!navigator.geolocation){estado("Geolocalización no disponible.");return;}
+$('#btnCerca').onclick = ()=>{
+  if(!navigator.geolocation){ estado("Geolocalización no disponible."); return; }
+  if(!DATA.length){ estado("Primero actualizá los datos."); return; }
   estado("Buscando tu ubicación…");
   navigator.geolocation.getCurrentPosition(pos=>{
-    const {latitude,longitude}=pos.coords;
-    const R=6371000,toRad=g=>g*Math.PI/180;
-    const lista=DATA.filter(d=>d.lat&&d.lng).map(d=>{
-      const dLat=toRad(d.lat-latitude),dLon=toRad(d.lng-longitude);
-      const a=Math.sin(dLat/2)**2+Math.cos(toRad(latitude))*Math.cos(toRad(d.lat))*Math.sin(dLon/2)**2;
+    const {latitude, longitude} = pos.coords;
+    const R=6371000, toRad=g=>g*Math.PI/180, radio=600;
+    const lista = DATA.filter(d=>d.lat&&d.lng).map(d=>{
+      const dLat=toRad(d.lat-latitude), dLon=toRad(d.lng-longitude);
+      const a=Math.sin(dLat/2)**2 + Math.cos(toRad(latitude))*Math.cos(toRad(d.lat))*Math.sin(dLon/2)**2;
       const dist=2*R*Math.asin(Math.sqrt(a));
-      return {...d,dist};
-    }).filter(d=>d.dist<=600).sort((a,b)=>a.dist-b.dist);
+      return {...d, dist};
+    }).filter(d=>d.dist<=radio).sort((a,b)=>a.dist-b.dist);
     render(lista);
-    estado("Cerca: "+lista.length+" en 600 m.");
-  },()=>estado("No se pudo obtener la ubicación."));
+    estado("Cerca: " + lista.length + " en " + radio + " m.");
+  }, ()=>estado("No se pudo obtener la ubicación."));
 };
 
-document.getElementById("btnVoz").onclick=()=>{
-  if(!('webkitSpeechRecognition'in window)){estado("Tu navegador no admite reconocimiento de voz.");return;}
-  const rec=new webkitSpeechRecognition();
-  rec.lang="es-ES";
+$('#btnVoz').onclick = ()=>{
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ estado("Tu navegador no admite reconocimiento de voz."); return; }
+  const rec = new SR();
+  rec.lang = "es-ES";
   rec.start();
   estado("Escuchando…");
-  rec.onresult=e=>{
-    const txt=e.results[0][0].transcript;
-    document.getElementById("busqueda").value=txt;
-    const r=filtrar(txt);
+  rec.onresult = e=>{
+    const txt = e.results[0][0].transcript;
+    $('#busqueda').value = txt;
+    const r = filtrar(txt);
     render(r);
-    estado("Voz: '"+txt+"' → "+r.length+" resultado(s).");
+    estado("Voz: '"+txt+"' → " + r.length + " resultado(s).");
   };
-  rec.onerror=()=>estado("Error al escuchar.");
+  rec.onerror = ()=> estado("Error al escuchar.");
 };
 
+/* Carga inicial (no lista automáticamente) */
 cargarCSV();
 </script>
 </body>
