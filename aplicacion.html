@@ -40,7 +40,7 @@
 <footer>vEstable • texto o voz • “Cerca” • sin autolistar</footer>
 
 <script>
-/* CSV público (el que pasaste) */
+// CSV PÚBLICO (el que pasaste)
 const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 
 let DATA = [];
@@ -49,7 +49,6 @@ let LOADED = false;
 const $ = s => document.querySelector(s);
 const estado = t => { $('#estado').textContent = t; console.log(t); };
 
-/* CSV parser con soporte de comillas/comas */
 function parseCSV(text){
   const out=[], row=[]; let i=0, f="", q=false;
   while(i<text.length){
@@ -61,8 +60,8 @@ function parseCSV(text){
     }
     if(c==='"'){ q=true; i++; continue; }
     if(c===','){ row.push(f); f=""; i++; continue; }
-    if(c=='\r'){ i++; continue; }
-    if(c=='\n'){ row.push(f); out.push(row.slice()); row.length=0; f=""; i++; continue; }
+    if(c==='\r'){ i++; continue; }
+    if(c==='\n'){ row.push(f); out.push(row.slice()); row.length=0; f=""; i++; continue; }
     f+=c; i++;
   }
   if(f.length||row.length){ row.push(f); out.push(row); }
@@ -100,7 +99,7 @@ async function cargarCSV(){
 
 function imgOrPlaceholder(src, alt){
   const ok = /^https?:\/\//i.test(src);
-  return ok ? `<img loading="lazy" src="${src}" alt="${alt}" onerror="this.replaceWith(document.createElement('div'));this.previousSibling?.remove();">`
+  return ok ? `<img loading="lazy" src="${src}" alt="${alt}" onerror="this.replaceWith(document.createElement('div'));">`
             : `<div class="imgbox">Sin imagen</div>`;
 }
 
@@ -126,7 +125,6 @@ async function ensureLoaded(){
   if(!LOADED) await cargarCSV();
 }
 
-/* Botones */
 $('#btnBuscar').onclick = async ()=>{
   await ensureLoaded();
   const q = $('#busqueda').value.trim();
@@ -186,7 +184,6 @@ $('#btnVoz').onclick = async ()=>{
   rec.onerror = ()=> estado("Error al escuchar.");
 };
 
-/* Carga inicial */
 estado('Listo. No se cargan comercios hasta que lo pidas.');
 </script>
 </body>
