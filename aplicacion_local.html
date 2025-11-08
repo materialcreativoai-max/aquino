@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Galerías y Servicios</title>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;background:#0f1115;color:#e8ecf1;margin:0;text-align:center}
+  header{padding:14px;border-bottom:1px solid #1f2430}
+  h1{margin:0;font-size:20px}
+  main{max-width:900px;margin:auto;padding:20px}
+  input{padding:10px 12px;border-radius:8px;border:1px solid #273042;background:#0d0f14;color:#e8ecf1;width:70%}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #273042;background:#10151e;color:#e8ecf1;cursor:pointer;margin:6px}
+  button:hover{border-color:#3a475e}
+  #resultado{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:20px}
+  .card{background:#171a21;border:1px solid #232838;border-radius:14px;padding:10px}
+  .imgbox{width:100%;height:150px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#0d1016;color:#7d8aa3}
+  .card img{width:100%;height:150px;object-fit:cover;border-radius:10px;display:block}
+  .empty{border:1px dashed #273042;border-radius:14px;padding:20px;margin-top:20px;color:#aab3c3}
+  footer{font-size:12px;color:#93a0b4;padding:10px;border-top:1px solid #1f2430}
+</style>
+</head>
+<body>
+<header><h1>Galerías y Servicios</h1></header>
+
+<main>
+  <p id="estado">Listo. No se cargan comercios hasta que lo pidas.</p>
+  <input id="busqueda" type="text" placeholder="Escribí o hablá para buscar…">
+  <div>
+    <button id="btnBuscar">Buscar</button>
+    <button id="btnVoz">🎤 Voz</button>
+    <button id="btnCerca">Cerca</button>
+    <button id="btnActualizar">Actualizar</button>
+    <button id="btnLimpiar">Limpiar</button>
+  </div>
+  <section id="resultado"></section>
+  <div id="vacio" class="empty" style="display:none;">Sin resultados.</div>
+</main>
+
+<footer>DEMO LOCAL • usa data.csv en la misma carpeta</footer>
+
+<script>
+// CSV PÚBLICO (el que pasaste)
+const DATA_URL = "data.csv";
+
+let DATA = [];
+let LOADED = false;
+
+const $ = s => document.querySelector(s);
+const estado = t => { $('#estado').textContent = t; console.log(t); };
+
+function parseCSV(text){
+  const out=[], row=[]; let i=0, f="", q=false;
+  while(i<text.length){
+    const c=text[i];
+    if(q){
+      if(c==='"' && text[i+1]==='"'){ f+='"'; i+=2; continue; }
+      if(c==='"'){ q=false; i++; continue; }
+      f+=c; i++; continue;
+    }
+    if(c==='"'){ q=true; i++; continue; }
+    if(c===','){ row.push(f); f=""; i++; continue; }
+    if(c==='\r'){ i++; continue; }
+    if(c==='\n'){ row.push(f); out.push(row.slice()); row.length=0; f=""; i++; continue; }
+    f+=c; i++;
+  }
+  if(f.length||row.length){ row.push(f); out.push(row); }
+  const rows = out.filter(r => r.some(x => String(x).trim()!==""));
+  if(!rows.length) return {head:[], data:[]};
+  const head = rows.shift().map(h=>String(h).trim().toLowerCase());
+  const idx = k => head.findIndex(h=>h.includes(k));
+  const data = rows.map(r=>({
+    nombre: r[idx('nombre')]||'',
+    categoria: r[idx('categoria')]||'',
+    barrio: r[idx('barrio')]||'',
+    direccion: r[idx('direccion')]||'',
+    lat: parseFloat(String(r[idx('lat')]||'').replace(',','.')) || null,
+    lng: parseFloat(String(r[idx('lng')]||'').replace(',','.')) || null,
+    imagen: (r[idx('imagen')]||'').trim()
+  }));
+  return {head, data};
+}
+
+async function cargarCSV(){
+  estado("Cargando CSV…");
+  try{
+    const res = await fetch(DATA_URL + "&nocache=" + Date.now(), {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const txt = await res.text();
+    const {data} = parseCSV(txt);
+    DATA = data;
+    LOADED = true;
+    estado("CSV cargado: " + DATA.length + " filas (no se muestran hasta que busques).");
+  }catch(e){
+    console.error(e);
+    estado("Error al cargar datos del Sheet.");
+  }
+}
+
+function imgOrPlaceholder(src, alt){
+  const ok = /^https?:\/\//i.test(src);
+  return ok ? `<img loading="lazy" src="${src}" alt="${alt}" onerror="this.replaceWith(document.createElement('div'));">`
+            : `<div class="imgbox">Sin imagen</div>`;
+}
+
+function render(lista){
+  $('#resultado').innerHTML = lista.map(d => `
+    <div class="card">
+      ${imgOrPlaceholder(d.imagen, d.nombre)}
+      <h3>${d.nombre}</h3>
+      <p>${d.categoria||""} ${d.barrio ? "· "+d.barrio : ""}</p>
+      <p>${d.direccion||""}</p>
+    </div>`).join('');
+  $('#vacio').style.display = lista.length ? 'none' : 'block';
+}
+
+const normalizar = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function filtrar(q){
+  const n = normalizar(q);
+  if(!n) return [];
+  return DATA.filter(d => normalizar([d.nombre,d.categoria,d.barrio,d.direccion].join(' ')).includes(n));
+}
+
+async function ensureLoaded(){
+  if(!LOADED) await cargarCSV();
+}
+
+$('#btnBuscar').onclick = async ()=>{
+  await ensureLoaded();
+  const q = $('#busqueda').value.trim();
+  if(!q){ estado("Escribí algo o usá el micrófono."); return; }
+  const r = filtrar(q);
+  render(r);
+  estado("Buscar: " + r.length + " encontrado(s).");
+};
+
+$('#btnLimpiar').onclick = ()=>{
+  $('#busqueda').value = '';
+  render([]);
+  $('#vacio').style.display='none';
+  estado('Limpio. Nada en pantalla hasta que busques.');
+};
+
+$('#btnActualizar').onclick = async ()=>{
+  LOADED=false;
+  await cargarCSV();
+  render([]);
+  $('#vacio').style.display='none';
+};
+
+$('#btnCerca').onclick = async ()=>{
+  await ensureLoaded();
+  if(!navigator.geolocation){ estado("Geolocalización no disponible."); return; }
+  estado("Buscando tu ubicación…");
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const {latitude, longitude}=pos.coords;
+    const R=6371000, toRad=g=>g*Math.PI/180, radio=600;
+    const lista = DATA.filter(d=>d.lat&&d.lng).map(d=>{
+      const dLat=toRad(d.lat-latitude), dLon=toRad(d.lng-longitude);
+      const a=Math.sin(dLat/2)**2+Math.cos(toRad(latitude))*Math.cos(toRad(d.lat))*Math.sin(dLon/2)**2;
+      const dist=2*R*Math.asin(Math.sqrt(a));
+      return {...d, dist};
+    }).filter(d=>d.dist<=radio).sort((a,b)=>a.dist-b.dist);
+    render(lista);
+    estado("Cerca: " + lista.length + " en " + radio + " m.");
+  }, ()=>estado("No se pudo obtener la ubicación."));
+};
+
+$('#btnVoz').onclick = async ()=>{
+  await ensureLoaded();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ estado("Tu navegador no admite reconocimiento de voz."); return; }
+  const rec = new SR();
+  rec.lang = "es-ES";
+  rec.start();
+  estado("Escuchando…");
+  rec.onresult = e=>{
+    const txt = e.results[0][0].transcript;
+    $('#busqueda').value = txt;
+    const r = filtrar(txt);
+    render(r);
+    estado("Voz: '"+txt+"' → " + r.length + " resultado(s).");
+  };
+  rec.onerror = ()=> estado("Error al escuchar.");
+};
+
+estado('Listo. No se cargan comercios hasta que lo pidas.');
+</script>
+</body>
+</html>
