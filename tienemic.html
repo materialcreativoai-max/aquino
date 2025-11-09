@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aquí Nomás — estable + voz + frases naturales</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
+.wrap{max-width:900px;margin:0 auto;padding:16px}
+.box{margin-top:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.input{flex:1;padding:8px 10px;font-size:16px}
+.btn{padding:8px 12px;border:none;border-radius:6px;cursor:pointer;background:#0b5cff;color:#fff}
+.btn.ghost{background:#eee;color:#333}
+.btn.secondary{background:#ddd;color:#000}
+.card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:10px;margin:8px 0;box-shadow:0 1px 2px rgba(0,0,0,0.05)}
+.title{font-weight:600;margin-bottom:4px}
+.title span{color:#555}
+.meta{font-size:13px;color:#666}
+#intent{margin-top:8px;font-size:13px;color:#333}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏷️ Aquí Nomás — estable final</h1>
+  <div class="box">
+    <div class="row">
+      <input id="qall" class="input" placeholder="Ej: 'almorzar en el centro', 'florería en flores'"/>
+      <button id="mic" class="btn" title="Dictar por voz">🎤</button>
+      <button id="go" class="btn">Buscar</button>
+      <button id="near" class="btn secondary">📍 Cerca</button>
+      <button id="clear" class="btn ghost">Limpiar</button>
+    </div>
+    <div id="intent"></div>
+  </div>
+  <div id="status" class="meta"></div>
+  <div id="results" class="box"></div>
+</div>
+
+<script>
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+const R_KM=1.0;
+let DATA=[],POS=null;
+const $=s=>document.querySelector(s);
+
+function norm(t){return(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));}
+function parseCoord(v){if(!v)return NaN;let s=String(v).replace(",",".");let n=parseFloat(s);if(!isFinite(n))return NaN;if(Math.abs(n)>180)n/=1e6;return n;}
+function haversineKm(a,b){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
+
+async function loadData(){
+  if(DATA.length) return;
+  const res=await fetch(CSV_URL+"&nocache="+Date.now());
+  const txt=await res.text();
+  const raw=parseCSV(txt);
+  DATA=raw.map(r=>{
+    const name=r.nombre_local||r.nombre||r.local||"";
+    const rubro=r.rubro||"";
+    const barrio=r.barrio||"";
+    const dir=r.direccion||"";
+    const kw=r.keywords||"";
+    const lat=parseCoord(r.lat),lng=parseCoord(r.lng);
+    const base=norm([name,rubro,barrio,dir,kw].join(" "));
+    return{r,name,rubro,barrio,dir,kw,lat,lng,base};
+  });
+  $("#status").textContent="Datos cargados: "+DATA.length;
+}
+
+function tokens(q){
+  const stop=["en","por","de","la","el","los","las","una","un","al","del","necesito","quiero","buscar","busco","para"];
+  return norm(q).split(/\s+/).filter(t=>t&&!stop.includes(t));
+}
+
+function detectIntent(q){
+  if(/(almorzar|almuerzo|menu|comida|gastronom)/i.test(q)) return "almorzar";
+  if(/(flor|floreria)/i.test(q)) return "florería";
+  if(/(libro|librer)/i.test(q)) return "librería";
+  if(/(ferreter)/i.test(q)) return "ferretería";
+  if(/(helad)/i.test(q)) return "heladería";
+  return "";
+}
+
+function detectBarrio(q){
+  const barrios=["microcentro","centro","recoleta","belgrano","flores","retiro","almagro","la_boca"];
+  for(const b of barrios){if(q.includes(b))return b;}
+  return "";
+}
+
+function search(q){
+  const toks=tokens(q);
+  const intent=detectIntent(q);
+  const barrio=detectBarrio(q);
+  $("#intent").innerHTML=(intent||barrio)?`<b>Intención:</b> ${intent||'-'} · <b>Barrio:</b> ${barrio||'-'}`:"";
+
+  const out=DATA.filter(o=>{
+    const matchIntent=!intent||o.rubro.includes(intent)||o.kw.includes(intent);
+    const matchBarrio=!barrio||norm(o.barrio).includes(barrio);
+    return toks.some(t=>o.base.includes(t))&&matchIntent&&matchBarrio;
+  });
+
+  render(out);
+}
+
+function render(list){
+  const box=$("#results");
+  if(!list.length){box.innerHTML='<div class="meta">Sin resultados.</div>';return;}
+  box.innerHTML=list.map(o=>{
+    const r=o.r;
+    const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
+    return `<div class="card">
+      <div class="title">${o.name} — <span>${o.rubro}</span></div>
+      <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
+      <div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div>
+    </div>`;
+  }).join("");
+}
+
+async function runSearch(){await loadData();const q=$("#qall").value.trim();search(q);}
+async function runVoice(){
+  await loadData();
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){$("#status").textContent="Tu navegador no admite reconocimiento de voz.";return;}
+  const rec=new SR();
+  rec.lang="es-AR"; rec.start();
+  $("#status").textContent="Escuchando…";
+  rec.onresult=e=>{
+    const txt=e.results[0][0].transcript;
+    $("#qall").value=txt;
+    $("#status").textContent="Voz: "+txt;
+    search(txt);
+  };
+  rec.onerror=()=>$("#status").textContent="Error al escuchar.";
+}
+
+$("#go").addEventListener("click",runSearch);
+$("#mic").addEventListener("click",runVoice);
+$("#clear").addEventListener("click",()=>{$("#qall").value="";$("#results").innerHTML="";$("#intent").innerHTML="";});
+$("#qall").addEventListener("keydown",e=>{if(e.key==="Enter")runSearch();});
+
+loadData();
+</script>
+</body>
+</html>
