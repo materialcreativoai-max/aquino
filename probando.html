@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aquí Nomás — versión estable definitiva</title>
+<title>Aquí Nomás — probando (estable)</title>
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
 .wrap{max-width:900px;margin:0 auto;padding:16px}
@@ -29,7 +29,7 @@ h1{font-size:22px;margin:0 0 12px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — versión estable definitiva</h1>
+  <h1>🏷️ Aquí Nomás — probando (estable)</h1>
 
   <div class="box">
     <div class="row">
@@ -47,145 +47,274 @@ h1{font-size:22px;margin:0 0 12px}
 
 <script>
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-const R_KM=1.0;
-let DATA=[],POS=null;
+const R_KM = 1.0;
 
-const $=s=>document.querySelector(s);
-const qInput=$("#q"),statusEl=$("#status"),resultsEl=$("#results");
-const setStatus=t=>statusEl.textContent=t||"";
+let DATA = [];
+let POS  = null;
 
-// Normaliza texto (acentos, mayúsculas, etc.)
-function norm(t){return(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+const $ = s => document.querySelector(s);
+const qInput   = $("#q");
+const statusEl = $("#status");
+const resultsEl= $("#results");
 
-// Carga CSV y arma los objetos
+function setStatus(msg){
+  statusEl.textContent = msg || "";
+}
+
+function norm(t){
+  return (t||"")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"");
+}
+
+// Parseo simple de CSV con soporte para comillas
+function parseCSV(text){
+  const lines = text.trim().split(/\r?\n/);
+  const headerLine = lines.shift();
+  const headers = headerLine
+    .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+    .map(h => h.replace(/^"|"$/g,"").trim().toLowerCase());
+
+  return lines.map(line=>{
+    if(!line.trim()) return null;
+    const cells = line
+      .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map(c => c.replace(/^"|"$/g,"").trim());
+    const row = {};
+    headers.forEach((h,i)=>{ row[h] = cells[i] || ""; });
+    return row;
+  }).filter(Boolean);
+}
+
+// Cargar datos desde el sheet, adaptado a TU estructura de columnas
 async function loadData(){
   if(DATA.length) return;
   setStatus("Cargando comercios…");
-  const res=await fetch(CSV_URL+"&nocache="+Date.now());
-  const txt=await res.text();
-  const lines=txt.trim().split(/\r?\n/);
-  const headers=lines.shift().split(",").map(h=>h.trim().toLowerCase());
-  DATA=lines.map(l=>{
-    const cells=l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"").trim());
-    const o=Object.fromEntries(headers.map((h,i)=>[h,cells[i]||""]));
-    const lat=parseFloat(o.lat)||parseFloat(o.latitud)||null;
-    const lng=parseFloat(o.lng)||parseFloat(o.longitud)||null;
-    const texto=norm([o.nombre_local,o.rubro,o.keywords,o.barrio,o.direccion].join(" "));
-    return {...o,lat,lng,texto};
+  const res = await fetch(CSV_URL + "&nocache=" + Date.now());
+  const txt = await res.text();
+  const rows = parseCSV(txt);
+
+  DATA = rows.map(r=>{
+    // columnas exactas que me diste:
+    // nombre_local, rubro, keywords, direccion, barrio, lat, lng, horario, whatsapp, promo_texto, id_local, logo_key, imagen_url
+    const nombre_local = r["nombre_local"] || "";
+    const rubro        = r["rubro"]        || "";
+    const keywords     = r["keywords"]     || "";
+    const direccion    = r["direccion"]    || "";
+    const barrio       = r["barrio"]       || "";
+    const horario      = r["horario"]      || "";
+    const whatsapp     = r["whatsapp"]     || "";
+    const promo_texto  = r["promo_texto"]  || "";
+    const id_local     = r["id_local"]     || "";
+    const logo_key     = r["logo_key"]     || "";
+    const imagen_url   = r["imagen_url"]   || "";
+
+    const lat = parseFloat(r["lat"]);
+    const lng = parseFloat(r["lng"]);
+
+    const texto = norm([
+      nombre_local,
+      rubro,
+      keywords,
+      direccion,
+      barrio
+    ].join(" "));
+
+    return {
+      nombre_local,
+      rubro,
+      keywords,
+      direccion,
+      barrio,
+      lat: isNaN(lat)?null:lat,
+      lng: isNaN(lng)?null:lng,
+      horario,
+      whatsapp,
+      promo_texto,
+      id_local,
+      logo_key,
+      imagen_url,
+      texto
+    };
   });
-  setStatus("Datos cargados: "+DATA.length+" locales.");
+
+  setStatus("Datos cargados: " + DATA.length + " locales.");
 }
 
-// Calcula distancia entre coordenadas
+// Distancia en km
 function haversineKm(a,b){
-  const R=6371,toRad=x=>x*Math.PI/180;
-  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
+  const R=6371, toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat);
+  const dLng=toRad(b.lng-a.lng);
   const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
   const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
 
-// Divide la búsqueda en palabras útiles
+// Palabras útiles de la query
 function tokensFromQuery(q){
-  const stop=["en","por","sobre","de","la","el","los","las","un","una","y","al","del","para","cerca"];
-  return norm(q).split(/\s+/).filter(t=>t&&!stop.includes(t)&&t.length>=3);
+  const stop = ["en","por","sobre","de","la","el","los","las","un","una","y","al","del","para","cerca"];
+  return norm(q)
+    .split(/\s+/)
+    .filter(t => t && !stop.includes(t) && t.length>=3);
 }
 
-// Busca coincidencias de texto o cercanía
-function search(query,onlyNear){
-  const tokens=tokensFromQuery(query);
-  if(!tokens.length&&!onlyNear){setStatus("Escribí algo más específico.");return[];}
-  const out=[];
-  for(const row of DATA){
-    let match=true;
-    if(tokens.length){
-      const hits=tokens.filter(t=>row.texto.includes(t));
-      if(!hits.length)match=false;
-    }
-    if(!match)continue;
-    let dist=null;
-    if(POS&&!isNaN(row.lat)&&!isNaN(row.lng)){
-      dist=haversineKm(POS,{lat:row.lat,lng:row.lng});
-    }
-    if(onlyNear){
-      if(dist==null||dist>R_KM)continue;
-    }
-    out.push({...row,distKm:dist});
+// Búsqueda principal
+function search(query, onlyNear){
+  const tokens = tokensFromQuery(query);
+  const out = [];
+
+  if(!tokens.length && !onlyNear){
+    setStatus("Escribí algo más específico.");
+    return [];
   }
+
+  for(const row of DATA){
+    let match = true;
+
+    // Filtro de texto: basta con que ALGUNA palabra clave matchee
+    if(tokens.length){
+      const hits = tokens.filter(t => row.texto.includes(t));
+      if(!hits.length) match = false;
+    }
+
+    if(!match) continue;
+
+    // Distancia
+    let dist = null;
+    if(POS && row.lat!=null && row.lng!=null){
+      dist = haversineKm(POS,{lat:row.lat,lng:row.lng});
+    }
+
+    // Modo cerca: solo dentro de 1 km
+    if(onlyNear){
+      if(dist==null || dist>R_KM) continue;
+    }
+
+    out.push({...row, distKm: dist});
+  }
+
+  // Orden: primero cercanía, después nombre
   out.sort((a,b)=>{
-    const da=(typeof a.distKm==="number")?a.distKm:9999;
-    const db=(typeof b.distKm==="number")?b.distKm:9999;
-    if(da!==db)return da-db;
-    return (a.nombre_local||"").localeCompare(b.nombre_local||"");
+    const da = (typeof a.distKm==="number")?a.distKm:9999;
+    const db = (typeof b.distKm==="number")?b.distKm:9999;
+    if(da!==db) return da-db;
+    return a.nombre_local.localeCompare(b.nombre_local);
   });
+
   return out;
 }
 
-// Renderiza tarjetas
+// Render de resultados
 function render(list){
-  if(!list.length){resultsEl.innerHTML='<div class="empty">Sin resultados.</div>';return;}
-  resultsEl.innerHTML=list.map(r=>{
-    const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
-    const dist=(typeof r.distKm==="number")?`<div class="meta">≈ ${r.distKm.toFixed(2)} km</div>`:"";
-    return `<div class="card">
-      <div class="title">${r.nombre_local||"(sin nombre)"} — <span>${r.rubro||""}</span></div>
-      <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
-      ${dist}
-      <div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div>
-    </div>`;
+  if(!list.length){
+    resultsEl.innerHTML = '<div class="empty">Sin resultados.</div>';
+    return;
+  }
+
+  resultsEl.innerHTML = list.map(r=>{
+    const maps = `https://www.google.com/maps/search/?api=1&query=${
+      encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))
+    }`;
+    const dist = (typeof r.distKm==="number")
+      ? `<div class="meta">≈ ${r.distKm.toFixed(2)} km</div>` : "";
+
+    const img = r.imagen_url
+      ? `<img src="${r.imagen_url}" alt="${r.nombre_local}" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px;" onerror="this.remove()">`
+      : "";
+
+    return `
+      <div class="card">
+        ${img}
+        <div class="title">${r.nombre_local || "(sin nombre)"} — <span>${r.rubro||""}</span></div>
+        <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
+        ${r.horario?`<div class="meta">Horario: ${r.horario}</div>`:""}
+        ${r.promo_texto?`<div class="meta">${r.promo_texto}</div>`:""}
+        ${dist}
+        <div class="meta">
+          ${r.whatsapp?`<a href="https://wa.me/54${String(r.whatsapp).replace(/[^0-9]/g,"")}" target="_blank">WhatsApp</a> · `:""}
+          <a href="${maps}" target="_blank">Cómo llegar</a>
+        </div>
+      </div>
+    `;
   }).join("");
 }
 
-// Buscar manual
+// Buscar por texto
 async function runSearch(){
   await loadData();
-  const q=qInput.value.trim();
-  const list=search(q,false);
+  const q = qInput.value.trim();
+  const list = search(q,false);
   render(list);
-  setStatus("Resultados: "+list.length);
+  setStatus("Resultados: " + list.length);
 }
 
-// Buscar cercanos (Cerca)
+// Buscar cercanos
 async function runNear(){
   await loadData();
-  if(!navigator.geolocation){setStatus("Tu navegador no permite geolocalización.");return;}
+  if(!navigator.geolocation){
+    setStatus("Tu navegador no permite geolocalización.");
+    return;
+  }
   setStatus("Buscando tu ubicación…");
   navigator.geolocation.getCurrentPosition(pos=>{
-    POS={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    const list=search("",true);
+    POS = {lat:pos.coords.latitude,lng:pos.coords.longitude};
+    const list = search("",true);
     render(list);
-    setStatus("Locales cercanos (≤ 1 km): "+list.length);
-  },()=>{setStatus("No se pudo obtener la ubicación.");});
+    setStatus("Locales cercanos (≤ 1 km): " + list.length);
+  },()=>{
+    setStatus("No se pudo obtener la ubicación.");
+  });
 }
 
-// Buscar por voz
+// Búsqueda por voz
 async function runVoice(){
   await loadData();
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){setStatus("Tu navegador no admite reconocimiento de voz.");return;}
-  const rec=new SR();
-  rec.lang="es-AR";
-  rec.start();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    setStatus("Tu navegador no admite reconocimiento de voz.");
+    return;
+  }
+  const rec = new SR();
+  rec.lang = "es-AR";
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
   setStatus("🎤 Escuchando…");
-  rec.onresult=e=>{
-    const txt=e.results[0][0].transcript;
-    qInput.value=txt;
+  rec.start();
+
+  rec.onresult = e=>{
+    const txt = e.results[0][0].transcript;
+    qInput.value = txt;
     rec.stop();
     runSearch();
-    setStatus("Voz: "+txt);
   };
-  rec.onerror=()=>{setStatus("Error al escuchar.");};
+  rec.onerror = ()=>{
+    setStatus("Error al escuchar.");
+    try{rec.stop();}catch(e){}
+  };
+  rec.onend = ()=>{
+    if(!qInput.value.trim()){
+      setStatus("No se detectó voz o se bloqueó el micrófono.");
+    }
+  };
 }
 
 // Eventos
-$("#go").addEventListener("click",runSearch);
-$("#near").addEventListener("click",runNear);
-$("#mic").addEventListener("click",runVoice);
-$("#clear").addEventListener("click",()=>{qInput.value="";resultsEl.innerHTML="";setStatus("Buscador limpio. Probá una frase o 'Cerca'.");});
-qInput.addEventListener("keydown",e=>{if(e.key==="Enter")runSearch();});
+$("#go").addEventListener("click", runSearch);
+$("#near").addEventListener("click", runNear);
+$("#mic").addEventListener("click", runVoice);
+$("#clear").addEventListener("click", ()=>{
+  qInput.value="";
+  resultsEl.innerHTML="";
+  setStatus("");
+});
+qInput.addEventListener("keydown", e=>{
+  if(e.key==="Enter") runSearch();
+});
 
-// Precarga
-loadData().then(()=>{setStatus("Listo. Escribí, usá Voz o Cerca.");});
+// Carga inicial silenciosa
+loadData().then(()=>{ setStatus("Listo. Escribí, usá Voz o Cerca."); });
 </script>
 </body>
 </html>
