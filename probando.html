@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO auto-refresh (segura)</title>
+<title>Aquí Nomás — DEMO auto-refresh (segura + voz natural)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -62,14 +62,12 @@ const STATUS=document.getElementById("status"),ERR=document.getElementById("erro
 SRC.textContent="Fuente CSV: "+CSV_FALLBACK;
 let DATA=[],IDX=[],USER_POS=null,LOADED=false,refreshTimer=null;
 
-// --- utilidades ---
 function removeDiacritics(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
 function norm(s){return removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();}
 function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));}
 function parseCoord(v){if(!v)return NaN;let s=String(v).replace(",",".");let n=parseFloat(s);if(!isFinite(n)){const d=s.replace(/[^0-9]/g,"");if(d.length>=7)n=parseInt(d,10)/1e6;}if(Math.abs(n)>180)n/=1e6;return n;}
 function hav(a,b){const R=6371,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
 
-// --- carga CSV ---
 async function loadCSV(){
   try{
     STATUS.style.display='block';ERR.style.display='none';STATUS.textContent='Cargando CSV…';
@@ -93,7 +91,6 @@ async function loadCSV(){
   }
 }
 
-// --- geolocalización ---
 function getGeo(cb){
   const hint=document.getElementById('gpsHint');
   if(!navigator.geolocation){
@@ -109,7 +106,6 @@ function getGeo(cb){
   );
 }
 
-// --- búsqueda ---
 function buscar(){
   if(!LOADED){STATUS.textContent="Esperá que cargue el CSV…";return;}
   const q=document.getElementById('qall').value.trim().toLowerCase();
@@ -125,7 +121,6 @@ function buscar(){
   render(out);
 }
 
-// --- cerca ---
 function buscarCerca(){
   if(!LOADED){STATUS.textContent="Esperá que cargue el CSV…";return;}
   getGeo(()=>{
@@ -146,7 +141,6 @@ function buscarCerca(){
   });
 }
 
-// --- render ---
 function render(list,msg){
   const box=document.getElementById('results');
   if(!list.length){box.innerHTML='<div class="tiny">'+(msg||"Sin resultados.")+'</div>';return;}
@@ -163,63 +157,35 @@ function render(list,msg){
   }).join("");
 }
 
-// --- eventos UI ---
+// eventos
 document.getElementById('goBtn').onclick=buscar;
 document.getElementById('clearBtn').onclick=()=>{document.getElementById('qall').value='';document.getElementById('results').innerHTML='';};
 document.getElementById('locBtn').onclick=buscarCerca;
 document.getElementById('refreshBtn').onclick=loadCSV;
 document.getElementById('autoChk').onchange=e=>{if(e.target.checked){loadCSV();refreshTimer=setInterval(loadCSV,15000);}else{clearInterval(refreshTimer);}};
 
-// --- voz estable ---
+// voz natural + enter
 (function(){
-  const b = document.getElementById('micBtn');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    b.disabled = true;
-    b.innerText = '🎤—';
-    b.title = 'Reconocimiento de voz no disponible en este navegador';
-    return;
-  }
-
-  const rec = new SR();
-  rec.lang = 'es-AR';
-  rec.interimResults = false;
-  rec.maxAlternatives = 1;
-  let active = false;
-
-  b.addEventListener('click', () => {
-    if (active) return;
-    try {
-      rec.start();
-      active = true;
-      b.innerText = '⏺️ Escuchando...';
-      STATUS.style.display = 'block';
-      STATUS.textContent = '🎤 Escuchando... hablá claro';
-    } catch {}
-  });
-
-  rec.onresult = e => {
-    const txt = e.results[0][0].transcript.trim();
-    document.getElementById('qall').value = txt;
-    STATUS.textContent = '🎤 Reconocido: ' + txt;
-    rec.stop();
+  const b=document.getElementById('micBtn');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){b.disabled=true;b.innerText='🎤—';return;}
+  const rec=new SR();
+  rec.lang='es-AR';
+  rec.interimResults=false;
+  let active=false;
+  b.onclick=()=>{if(active)return;try{rec.start();active=true;b.innerText='⏺️';STATUS.style.display='block';STATUS.textContent='Escuchando…';}catch{}};
+  rec.onresult=e=>{
+    const t=e.results[0][0].transcript.trim();
+    document.getElementById('qall').value=t;
+    STATUS.style.display='block';
+    STATUS.textContent='🎙️ '+t;
     buscar();
   };
-
-  rec.onerror = err => {
-    STATUS.style.display = 'block';
-    STATUS.textContent = 'Error de micrófono: ' + (err.error || 'desconocido');
-    active = false;
-    b.innerText = '🎤';
-  };
-
-  rec.onend = () => {
-    active = false;
-    b.innerText = '🎤';
-  };
+  rec.onerror=()=>{STATUS.style.display='block';STATUS.textContent='Error de voz.';};
+  rec.onend=()=>{active=false;b.innerText='🎤';};
 })();
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter')buscar();});
 
-// --- inicio ---
 loadCSV();
 </script>
 </body>
