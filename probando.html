@@ -3,481 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aquí Nomás — demo v4 estable</title>
+<title>Aquí Nomás — v4 estable (correcciones)</title>
 <style>
-:root{
-  --pri:#0b5cff;
-  --bg:#f7f9fb;
-  --fg:#0b1220;
-  --muted:#6b7280;
-  --card:#ffffff;
-  --border:#e2e8f0;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-  background:var(--bg);
-  color:var(--fg);
-}
-.wrap{
-  max-width:900px;
-  margin:0 auto;
-  padding:16px;
-}
-h1{
-  font-size:22px;
-  margin:0 0 12px;
-}
-.box{
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:12px;
-  margin-bottom:12px;
-  box-shadow:0 4px 10px rgba(15,23,42,.06);
-}
-.row{
-  display:flex;
-  gap:8px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-.input{
-  flex:1 1 200px;
-  padding:10px 12px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  font-size:14px;
-}
-.btn{
-  border-radius:999px;
-  border:1px solid transparent;
-  padding:8px 12px;
-  font-size:14px;
-  cursor:pointer;
-  background:var(--pri);
-  color:#fff;
-  display:inline-flex;
-  align-items:center;
-  gap:4px;
-}
-.btn.ghost{
-  background:transparent;
-  color:var(--muted);
-  border-color:var(--border);
-}
-.btn.secondary{
-  background:#e5edff;
-  color:#1e40af;
-}
-.btn.mic{
-  background:#fee2e2;
-  color:#b91c1c;
-}
-.btn:disabled{
-  opacity:.6;
-  cursor:not-allowed;
-}
-.chips{
-  margin-top:8px;
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-}
-.chip{
-  font-size:12px;
-  padding:4px 8px;
-  border-radius:999px;
-  background:#e5e7eb;
-  color:#374151;
-}
-.tiny{
-  font-size:12px;
-  color:var(--muted);
-  margin-top:4px;
-}
-.card{
-  border-radius:10px;
-  border:1px solid var(--border);
-  padding:10px;
-  margin-bottom:8px;
-  background:#ffffff;
-}
-.card .title{
-  font-weight:600;
-  margin-bottom:2px;
-}
-.card .title span{
-  font-weight:400;
-  color:var(--muted);
-}
-.card .meta{
-  font-size:12px;
-  color:var(--muted);
-  margin-top:4px;
-}
-.card .promo{
-  font-size:13px;
-  margin-top:4px;
-}
-.card-actions{
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-  margin-top:8px;
-}
-.empty{
-  font-size:14px;
-  color:var(--muted);
-  padding:8px;
-}
-@media (max-width:600px){
-  .row{flex-direction:column}
-  .input{width:100%}
-}
+body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
+.wrap{max-width:900px;margin:auto;padding:16px}
+h1{font-size:22px;margin:0 0 12px}
+.box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.input{flex:1 1 200px;padding:10px 12px;border-radius:999px;border:1px solid #e2e8f0}
+.btn{border:none;border-radius:999px;padding:8px 12px;font-size:14px;cursor:pointer}
+.btn.mic{background:#fee2e2;color:#b91c1c}
+.btn.secondary{background:#e5edff;color:#1e40af}
+.btn.ghost{background:#fff;color:#6b7280;border:1px solid #e2e8f0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{background:#e5e7eb;border-radius:999px;padding:4px 8px;font-size:12px}
+.tiny{font-size:12px;color:#6b7280;margin-top:4px}
+.card{border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;background:#fff}
+.card .title{font-weight:600}
+.card .meta{font-size:12px;color:#6b7280;margin-top:4px}
+.empty{font-size:14px;color:#6b7280;padding:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — demo v4 estable</h1>
+  <h1>🏷️ Aquí Nomás — v4 estable</h1>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" autofocus
-             placeholder="Ej: 'almorzar en Santa Fe', 'arreglo de cierres en Caballito', 'cerca'">
-      <button id="micBtn" class="btn mic" title="Dictar por voz (Chrome/Edge)">🎤 Voz</button>
-      <button id="goBtn" class="btn">Buscar</button>
-      <button id="clearBtn" class="btn ghost">Limpiar</button>
-      <button id="locBtn" class="btn secondary" title="Locales cerca mío">📍 Cerca</button>
+      <input id="q" class="input" placeholder="Ej: 'almorzar en Santa Fe', 'arreglo de cierres Caballito'">
+      <button id="mic" class="btn mic">🎤 Voz</button>
+      <button id="go" class="btn">Buscar</button>
+      <button id="clear" class="btn ghost">Limpiar</button>
+      <button id="near" class="btn secondary">📍 Cerca</button>
     </div>
-    <div class="chips" id="chips"></div>
-    <div class="tiny" id="gpsHint" style="display:none">
-      📍 Mostrando locales dentro de 1 km.
-    </div>
-    <div class="tiny" id="status"></div>
+    <div id="chips" class="chips"></div>
+    <div id="status" class="tiny"></div>
   </div>
 
   <div id="results" class="box"></div>
 </div>
 
 <script>
-// ------------------ CONFIG ------------------
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-
-let DATA = [];
-let USER_POS = null;
-let NEAR_ACTIVE = false;
-const NEAR_RADIUS_KM = 1.0;
-
-// ------------------ HELPERS ------------------
-const $ = s => document.querySelector(s);
-const statusEl = $("#status");
-const chipsEl = $("#chips");
-const gpsHintEl = $("#gpsHint");
-const resultsEl = $("#results");
-const inputEl = $("#qall");
-
-function setStatus(msg){
-  if(statusEl) statusEl.textContent = msg || "";
-  console.log("[AQN]", msg);
-}
-
-function norm(t){
-  return (t || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g,"");
-}
-
-function parseCSV(txt){
-  const rows = txt.trim()
-    .split(/\r?\n/)
-    .map(r => r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-      .map(c => c.replace(/^"|"$/g,"")));
-  const head = rows.shift()
-    .map(h => h.trim().toLowerCase().replace(/\s+/g,"_"));
-  return rows.map(r => {
-    const o = {};
-    head.forEach((h,i)=>{ o[h] = (r[i] || "").trim(); });
-    return o;
-  });
-}
-
-function parseCoord(v){
-  if(!v) return NaN;
-  let s = String(v).replace(",",".");
-  let n = parseFloat(s);
-  if(!isFinite(n)) return NaN;
-  if(Math.abs(n) > 180) n = n / 1e6;
-  return n;
-}
-
-function haversineKm(a,b){
-  const R = 6371;
-  const toRad = x => x * Math.PI / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const s1 = Math.sin(dLat/2);
-  const s2 = Math.sin(dLng/2);
-  const A = s1*s1 +
-    Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
-  return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
-}
-
-// ------------------ DATA LOAD ------------------
-async function loadData(){
-  try{
-    setStatus("Cargando comercios…");
-    const res = await fetch(CSV_URL + "&nocache=" + Date.now(), {cache:"no-store"});
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    const txt = await res.text();
-    const raw = parseCSV(txt);
-    DATA = raw.map(r => {
-      const latKey = Object.keys(r).find(k => ["lat","latitud","latitude"].includes(k));
-      const lngKey = Object.keys(r).find(k => ["lng","lon","longitud","longitude"].includes(k));
-      const lat = latKey ? parseCoord(r[latKey]) : NaN;
-      const lng = lngKey ? parseCoord(r[lngKey]) : NaN;
-      return {...r, _lat:lat, _lng:lng};
-    });
-    setStatus("Datos cargados: " + DATA.length + " locales (no se muestran hasta que busques).");
-  }catch(e){
-    console.error(e);
-    setStatus("Error al cargar datos. Revisá el CSV.");
-  }
-}
-
-// ------------------ INTENCIÓN & ZONA ------------------
-function understand(raw){
-  const t0 = (raw || "").trim();
-  const t = norm(t0);
-  let zona = "";
-  let qText = t0;
-
-  // detectar "en/por/sobre zona"
-  const m = t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)/i);
-  if(m){
-    zona = (m[1] || "").trim();
-    qText = t0.replace(new RegExp(m[0],"i"),"").trim();
-  }
-
-  // sacar palabra "cerca" del texto de intención (si la hubiera)
-  const nearWords = ["cerca","cercano","cercanos","cercanas"];
-  const parts = qText.split(/\s+/);
-  const filtered = parts.filter(p => !nearWords.includes(norm(p)));
-  qText = filtered.join(" ").trim();
-
-  return {q:qText, z:zona};
-}
-
-function locationMatch(row, zona){
-  if(!zona) return true;
-  const base = norm((row.direccion || row.dirección || "") + " " + (row.barrio || ""));
-  const z = norm(zona).replace(/\s+/g," ").trim();
-  if(!z) return true;
-
-  // intersección "Santa Fe y Callao" en cualquier orden
-  if(z.includes(" y ")){
-    const [a,b] = z.split(" y ").map(s => s.trim()).filter(Boolean);
-    if(a && b){
-      return (base.includes(a) && base.includes(b)) ||
-             (base.includes(b) && base.includes(a));
-    }
-  }
-  // zona simple
-  return base.includes(z);
-}
-
-function intentMatch(row, q){
-  if(!q) return 0;
-  const text = norm([
-    row.nombre_local || row.nombre || "",
-    row.rubro || "",
-    row.categoria || "",
-    row.tags || "",
-    row.descripcion || row.descripcion_larga || ""
-  ].join(" "));
-  const qNorm = norm(q);
-  const tokens = qNorm.split(/\s+/).filter(t => t.length >= 3);
-  if(!tokens.length) return 0;
-
-  let score = 0;
-  for(const tok of tokens){
-    if(text.includes(tok)) score++;
-  }
-  return score;
-}
-
-// ------------------ BUSQUEDA ------------------
-function buscarInterno(q,z){
-  if(!DATA.length) return [];
-
-  return DATA.map(row => {
-    let score = 0;
-    let distKm = null;
-
-    // intención (qué quiero hacer/comprar)
-    const iScore = intentMatch(row,q);
-    if(q && iScore <= 0){
-      score = -1; // no matchea intención → fuera
-    }else{
-      score += iScore;
-    }
-
-    // zona (dónde)
-    if(score >= 0 && !locationMatch(row,z)){
-      score = -1;
-    }
-
-    // distancia
-    if(score >= 0 && USER_POS && !isNaN(row._lat) && !isNaN(row._lng)){
-      distKm = haversineKm(
-        {lat:USER_POS.lat, lng:USER_POS.lng},
-        {lat:row._lat,     lng:row._lng}
-      );
-      if(NEAR_ACTIVE){
-        if(distKm > NEAR_RADIUS_KM){
-          score = -1; // fuera del radio
-        }else{
-          score += 2; // boost por cercanía
-        }
-      }else{
-        const bonus = Math.max(0, 2 - distKm / 1.5);
-        score += bonus;
-      }
-    }
-
-    return {row: {...row, _distKm:distKm}, score};
-  })
-  .filter(x => x.score >= 0)
-  .sort((a,b) => {
-    if(b.score !== a.score) return b.score - a.score;
-    const da = (typeof a.row._distKm === "number") ? a.row._distKm : 9999;
-    const db = (typeof b.row._distKm === "number") ? b.row._distKm : 9999;
-    return da - db;
-  })
-  .map(x => x.row);
-}
-
-function renderResults(list){
-  if(!list || !list.length){
-    resultsEl.innerHTML = `<div class="empty">Sin resultados por ahora.</div>`;
-    gpsHintEl.style.display = (NEAR_ACTIVE && USER_POS) ? "block" : "none";
-    return;
-  }
-
-  resultsEl.innerHTML = list.map(r => {
-    const name = r.nombre_local || r.nombre || "(sin nombre)";
-    const maps = `https://www.google.com/maps/search/?api=1&query=${
-      encodeURIComponent((r.direccion || "") + " " + (r.barrio || ""))
-    }`;
-    const wa = r.whatsapp ? ("https://wa.me/54" + String(r.whatsapp).replace(/[^0-9]/g,"")) : null;
-    const dist = (typeof r._distKm === "number")
-      ? `<div class="meta">≈ ${r._distKm.toFixed(2)} km</div>`
-      : "";
-
-    return `
-      <div class="card">
-        <div class="title">${name} — <span>${r.rubro || ""}</span></div>
-        <div>${r.direccion || ""} ${r.barrio ? `(${r.barrio})` : ""}</div>
-        ${r.horario ? `<div class="promo">Horario: ${r.horario}</div>` : ""}
-        ${r.promo_texto ? `<div class="promo">${r.promo_texto}</div>` : ""}
-        ${dist}
-        <div class="card-actions">
-          ${wa ? `<a class="btn" target="_blank" href="${wa}">WhatsApp</a>` : ""}
-          <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  gpsHintEl.style.display = (NEAR_ACTIVE && USER_POS) ? "block" : "none";
-}
-
-function updateChips(q,z){
-  const parts = [];
-  if(z) parts.push(`<div class="chip"><strong>Zona:</strong> ${z}</div>`);
-  if(q) parts.push(`<div class="chip"><strong>Intención:</strong> ${q}</div>`);
-  if(NEAR_ACTIVE && USER_POS) parts.push(`<div class="chip"><strong>Modo:</strong> cercanos (≤ ${NEAR_RADIUS_KM} km)</div>`);
-  chipsEl.innerHTML = parts.join("");
-}
-
-// ------------------ EVENTOS ------------------
-function doSearch(){
-  const raw = inputEl.value || "";
-  const {q,z} = understand(raw);
-  updateChips(q,z);
-  const list = buscarInterno(q,z);
-  renderResults(list);
-  setStatus("Resultados: " + list.length);
-}
-
-$("#goBtn").addEventListener("click", () => {
-  NEAR_ACTIVE = false;
-  doSearch();
-});
-
-inputEl.addEventListener("keydown", e => {
-  if(e.key === "Enter"){
-    NEAR_ACTIVE = false;
-    doSearch();
-  }
-});
-
-$("#clearBtn").addEventListener("click", () => {
-  inputEl.value = "";
-  NEAR_ACTIVE = false;
-  USER_POS = USER_POS; // no tocamos la posición, solo el modo
-  chipsEl.innerHTML = "";
-  gpsHintEl.style.display = "none";
-  resultsEl.innerHTML = "";
-  setStatus("Buscador limpio. Escribí o dictá algo para empezar.");
-});
-
-$("#locBtn").addEventListener("click", () => {
-  if(!navigator.geolocation){
-    setStatus("Tu navegador no permite geolocalización.");
-    return;
-  }
-  setStatus("Buscando tu ubicación…");
-  navigator.geolocation.getCurrentPosition(pos => {
-    USER_POS = {lat:pos.coords.latitude, lng:pos.coords.longitude};
-    NEAR_ACTIVE = true;
-    updateChips(inputEl.value, ""); // solo marca modo
-    const list = buscarInterno("", ""); // solo cercanos, sin filtro de intención
-    renderResults(list);
-    setStatus("Locales cercanos: " + list.length + " dentro de 1 km.");
-  }, err => {
-    console.warn(err);
-    setStatus("No se pudo obtener la ubicación.");
-  });
-});
-
-// Voz
-$("#micBtn").addEventListener("click", () => {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){
-    setStatus("Tu navegador no admite reconocimiento de voz.");
-    return;
-  }
-  const rec = new SR();
-  rec.lang = "es-AR";
-  rec.start();
-  setStatus("Escuchando…");
-  rec.onresult = e => {
-    const txt = e.results[0][0].transcript;
-    inputEl.value = txt;
-    NEAR_ACTIVE = false;
-    doSearch();
-  };
-  rec.onerror = () => {
-    setStatus("Error al escuchar.");
-  };
-});
-
-// ------------------ INIT ------------------
-loadData();
-setStatus("Listo. Esperando tu búsqueda.");
+const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+let DATA=[],POS=null;
+const R_KM=1.0;
+const $=s=>document.querySelector(s);
+function norm(t){return(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));}
+function hav(a,b){const R=6371,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng),A=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(A));}
+function load(){fetch(CSV+"&nocache="+Date.now()).then(r=>r.text()).then(t=>{DATA=parseCSV(t);$("#status").textContent="CSV cargado: "+DATA.length+" filas.";});}
+function matchZone(r,z){if(!z)return!0;const f=norm((r.direccion||"")+" "+(r.barrio||""));const n=norm(z);if(n.includes(" y ")){const[a,b]=n.split(" y ").map(x=>x.trim());return f.includes(a)&&f.includes(b);}return f.includes(n);}
+function score(r,q,z){if(!q&&!z)return 0;let s=0;const txt=norm([r.nombre_local,r.nombre,r.rubro,r.categoria,r.descripcion].join(" "));const tokens=norm(q).split(/\s+/).filter(x=>x.length>2);tokens.forEach(t=>{if(txt.includes(t))s++;});if(!matchZone(r,z))s=-1;return s;}
+function understand(raw){const t=(raw||"").trim();const m=t.match(/(?:en|por|sobre)\s+([a-záéíóúñ\s]+)/i);return m?{q:t.replace(m[0],""),z:m[1].trim()}:{q:t,z:""};}
+function render(list){if(!list.length){$("#results").innerHTML='<div class="empty">Sin resultados.</div>';return;}$("#results").innerHTML=list.map(r=>{const name=r.nombre_local||r.nombre||"(sin nombre)";const dist=r._distKm?"<div class='meta'>≈ "+r._distKm.toFixed(2)+" km</div>":"";const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;return`<div class="card"><div class="title">${name} — <span>${r.rubro||""}</span></div><div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>${dist}<div class='meta'><a href='${maps}' target='_blank'>Cómo llegar</a></div></div>`;}).join("");}
+function buscar(q,z,near){const L=[];for(const r of DATA){let s=score(r,q,z);if(s>=0&&POS){const la=parseFloat(r.lat)||parseFloat(r.latitud),ln=parseFloat(r.lng)||parseFloat(r.longitud);if(!isNaN(la)&&!isNaN(ln)){const d=hav({lat:POS.lat,lng:POS.lng},{lat:la,lng:ln});r._distKm=d;if(near&&d>R_KM){s=-1;}}}if(s>=0)L.push(r);}return L;}
+$("#go").onclick=()=>{const {q,z}=understand($("#q").value);const list=buscar(q,z,false);render(list);$("#status").textContent="Resultados: "+list.length;};
+$("#clear").onclick=()=>{$("#q").value="";$("#results").innerHTML="";$("#status").textContent="";};
+$("#near").onclick=()=>{if(!navigator.geolocation){$("#status").textContent="Sin geolocalización";return;}navigator.geolocation.getCurrentPosition(p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};const list=buscar("", "", true);render(list);$("#status").textContent="Cerca (≤1 km): "+list.length;});};
+$("#mic").onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$("#status").textContent="Sin reconocimiento de voz.";return;}const rec=new SR();rec.lang="es-AR";rec.start();$("#status").textContent="Escuchando…";rec.onresult=e=>{const t=e.results[0][0].transcript;$("#q").value=t;rec.stop();const {q,z}=understand(t);const list=buscar(q,z,false);render(list);$("#status").textContent="Voz: "+t+" ("+list.length+")";};rec.onerror=()=>$("#status").textContent="Error al escuchar.";};
+load();
 </script>
 </body>
 </html>
