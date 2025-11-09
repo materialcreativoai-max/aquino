@@ -1,182 +1,70 @@
-<!doctype html>
-<html lang="es">
+
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — versión restaurada</title>
+<title>Aquí Nomás — DEMO (imágenes) v1</title>
+<title>Aquí Nomás — DEMO (imágenes ajustadas)</title>
 <style>
-:root{--azul:#0b5cff;}
-body{margin:0;background:#121418;color:#e6e9ee;
-font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:30px}
-input{padding:10px 12px;width:60%;max-width:400px;border:1px solid #1f232b;border-radius:8px;background:#1b1f26;color:#e6e9ee}
-button{padding:10px 14px;margin:4px;border:none;border-radius:8px;background:#0b5cff;color:#fff;cursor:pointer;font-weight:600}
-.card{background:#1b1f26;border:1px solid #1f232b;border-radius:10px;padding:12px;margin:10px auto;max-width:700px;text-align:left}
-.card b{color:#0b5cff}
+:root{--pri:#0b5cff;}
+*{box-sizing:border-box}
+@@ -18,18 +18,18 @@
+.btn.ghost{background:#fff;border-color:#cfd6e0;color:#0b1220}
+.btn.mic{border:1px dashed var(--pri);background:#eef3ff}
+.tiny{font-size:12px;color:#667}
+.card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0;overflow:hidden}
+.card{background:#fff;border:1px solid #e6e9ee;border-radius:14px;padding:12px;margin:10px 0;overflow:hidden;text-align:center}
+.title{font-weight:700;margin:8px 0 4px}
+.title span{font-weight:600;color:#555}
+.meta{font-size:12px;color:#566}
+.thumb{width:100%;aspect-ratio:3/2;object-fit:cover;border-radius:10px;background:#f1f3f7;display:block}
+.thumb{max-height:150px;width:auto;object-fit:contain;border-radius:12px;background:#f1f3f7;display:block;margin:0 auto 10px auto;box-shadow:0 1px 4px rgba(0,0,0,0.1)}
+.err{padding:8px 10px;background:#fff3f3;border:1px solid #ffd2d2;border-radius:10px;margin-bottom:12px;color:#7a1a1a}
+.ok{padding:8px 10px;background:#eef9f1;border:1px solid #cfead8;border-radius:10px;margin-bottom:12px;color:#145a32}
 </style>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Galerías y Servicios</title>
-  <meta name="description" content="Buscador liviano de comercios por nombre, categoría, barrio o cercanía." />
-  <style>
-    :root{--bg:#0f1115;--card:#171a21;--ink:#e8ecf1;--muted:#9aa4b2;--brand:#4cc9f0;--ok:#22c55e;--warn:#f59e0b;}
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif}
-    header{padding:16px 20px;border-bottom:1px solid #1f2430;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
-    header h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.2px}
-    .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-    input,select{background:#0d0f14;border:1px solid #272c38;color:var(--ink);padding:10px 12px;border-radius:10px;outline:none;min-width:180px}
-    input::placeholder{color:#6c7686}
-    button{background:#10151e;border:1px solid #273042;color:var(--ink);padding:10px 14px;border-radius:12px;cursor:pointer}
-    button:hover{border-color:#3a475e}
-    .brand{border-color:#214657;background:#0f1a22}
-    .brand:hover{border-color:#2f80a8}
-    .ok{border-color:#1f3b2a}
-    .ok:hover{border-color:#2a5a3a}
-    .ghost{background:transparent}
-    .chip{display:inline-flex;gap:8px;align-items:center}
-    .chip input{width:auto;min-width:auto}
-    main{max-width:1100px;margin:18px auto;padding:0 14px 80px}
-    .hint{color:var(--muted);font-size:14px;margin:8px 0 18px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
-    .card{background:var(--card);border:1px solid #232838;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:120px}
-    .imgbox{height:160px;background:#0c0f14;display:flex;align-items:center;justify-content:center}
-    .imgbox img{width:100%;height:100%;object-fit:cover;display:block}
-    .badge{position:absolute;margin:10px 0 0 10px;background:#0b1320bd;color:#cfe8ff;padding:4px 8px;border-radius:10px;font-size:12px;border:1px solid #203249}
-    .body{padding:12px 12px 14px}
-    .title{font-size:16px;font-weight:600;margin:0 0 6px}
-    .meta{color:var(--muted);font-size:13px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
-    .empty{border:1px dashed #273042;border-radius:16px;padding:22px;text-align:center;color:#aab3c3;background:#0e1118}
-    footer{position:fixed;left:0;right:0;bottom:0;background:#0c0f14;border-top:1px solid #1f2430;padding:8px 12px;color:#93a0b4;font-size:12px}
-    .sr{position:absolute;left:-10000px}
-  </style>
 </head>
 <body>
-<h1>🏷️ Aquí Nomás — Catálogo</h1>
-<input id="q" placeholder="Buscar comercio o servicio...">
-<div>
-  <button id="goBtn">Buscar</button>
-  <button id="clearBtn">Limpiar</button>
-  <button id="refreshBtn">Actualizar</button>
-  <button id="nearBtn">📍 Cerca</button>
+<div class="wrap">
+  <h1>🏷️ Aquí Nomás — DEMO (imágenes)</h1>
+  <h1>🏷️ Aquí Nomás — DEMO (imágenes ajustadas)</h1>
+  <div id="status" class="ok" style="display:none"></div>
+  <div id="error" class="err" style="display:none"></div>
+
+@@ -49,243 +49,86 @@ <h1>🏷️ Aquí Nomás — DEMO (imágenes)</h1>
 </div>
-<div id="results"><p>Esperando búsqueda...</p></div>
-  <header>
-    <h1>Galerías y Servicios</h1>
-    <div class="bar">
-      <input id="q" type="search" placeholder="Buscar por nombre / categoría / palabra…" />
-      <select id="cat"><option value="">Categoría</option></select>
-      <select id="barrio"><option value="">Barrio</option></select>
-      <select id="radio">
-        <option value="300">300 m</option>
-        <option value="600" selected>600 m</option>
-        <option value="1000">1 km</option>
-        <option value="2000">2 km</option>
-      </select>
-      <label class="chip">
-        <input id="inclSinImg" type="checkbox" />
-        <span>Incluir sin imagen</span>
-      </label>
-      <button id="btnBuscar" class="brand">Buscar</button>
-      <button id="btnTodos">Mostrar todos</button>
-      <button id="btnCerca" title="Usa tu ubicación">Cerca</button>
-      <button id="btnActualizar" class="ok">Actualizar</button>
-      <button id="btnLimpiar" class="ghost">Limpiar</button>
-    </div>
-  </header>
 
 <script>
-const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-let DATA=[],POS=null;
-  <main>
-    <p class="hint" id="estado">Listo. No se cargan comercios hasta que lo pidas.</p>
-    <section id="lista" class="grid" aria-live="polite"></section>
-    <div id="vacio" class="empty" style="display:none">Sin resultados. Probá otra búsqueda o amplía el radio.</div>
-  </main>
+/* === Config CSV === */
+const qs = (k)=>new URLSearchParams(location.search).get(k);
+const CSV_PARAM = qs('csv');
+const CSV_FALLBACK = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+const BASE_CSV = CSV_PARAM || CSV_FALLBACK;
+const qs=(k)=>new URLSearchParams(location.search).get(k);
+const CSV_PARAM=qs('csv');
+const CSV_FALLBACK="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
+const BASE_CSV=CSV_PARAM||CSV_FALLBACK;
 
-  <footer>
-    <span id="foot">v5 • búsqueda acento-insensible • carga bajo demanda • imágenes en lazy</span>
-  </footer>
+/* === Normalización === */
+function removeDiacritics(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function aliasPhrases(s){return s
+  .replace(/\bsanta\s+fe\b/g,'santafe')
+  .replace(/\bsan\s+nicolas\b/g,'sannicolas')
+  .replace(/\b9\s*de\s*julio\b/g,'9dejulio');
+}
+const normRaw = s => aliasPhrases(removeDiacritics(String(s||'').toLowerCase()));
+const norm = s => normRaw(s).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+function removeDiacritics(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function aliasPhrases(s){return s.replace(/\bsanta\s+fe\b/g,"santafe").replace(/\b9\s*de\s*julio\b/g,"9dejulio");}
+const norm=s=>aliasPhrases(removeDiacritics(String(s||"").toLowerCase())).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
 
+/* === CSV === */
 function parseCSV(txt){
-  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
-  const head=rows.shift().map(h=>h.trim().toLowerCase());
-  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
-<script>
-/* ==================== CONFIG ==================== */
-const DATA_URL = 'comercios.csv'; // Cambiá si tu CSV vive en otro path
-// Cabeceras esperadas (pueden venir con otros nombres: mapea abajo)
-const FIELD_MAP = {
-  id: ['id','codigo','cod'],
-  nombre: ['nombre','comercio','titulo'],
-  categoria: ['categoria','rubros','rubro'],
-  barrio: ['barrio','zona','localidad'],
-  lat: ['lat','latitud'],
-  lng: ['lng','long','longitud'],
-  imagen: ['imagen','img','foto','url_img','imagenurl'],
-  direccion: ['direccion','domicilio'],
-  tags: ['tags','etiquetas','palabras']
-};
-/* ================ UTILIDADES =================== */
-const $ = sel => document.querySelector(sel);
-const $$ = sel => Array.from(document.querySelectorAll(sel));
-const estado = msg => { $('#estado').textContent = msg; console.log(msg); };
-const quitarAcentos = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-const norm = s => quitarAcentos(String(s||'').toLowerCase().trim());
-function haversine(lat1,lon1,lat2,lon2){
-  const toRad = d=>d*Math.PI/180, R=6371000;
-  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
-  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-  return 2*R*Math.asin(Math.sqrt(a));
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'')));
+  const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\s+/g,'_'));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||'').trim()])));
 }
-function csvParse(text){
-  // Parser simple, soporta comillas dobles básicas.
-  const rows=[]; let i=0, cur='', cell='', inQ=false;
-  function pushCell(){cur+=cell; cell='';}
-  const lines=[]; for(let c of text){
-    if(inQ){ if(c==='"' ){ inQ=false; }
-             else if(c==='\r'){ cur+= '\r'; }
-             else { cur+=c; }
-             continue; }
-    if(c==='"'){ inQ=true; continue; }
-    if(c===','){ lines.push(cur); cur=''; continue; }
-    if(c==='\n'){ lines.push(cur); cur=''; rows.push(lines.splice(0)); continue; }
-    cur+=c;
-  }
-  if(cur.length||lines.length){ lines.push(cur); rows.push(lines); }
-  const header = rows.shift().map(h=>h.trim());
-  const mapIndex = {};
-  Object.entries(FIELD_MAP).forEach(([canon,alts])=>{
-    let idx = header.findIndex(h=>alts.includes(h.toLowerCase()));
-    if(idx<0) idx = header.findIndex(h=>norm(h)===canon);
-    mapIndex[canon]=idx;
-  });
-  const data = rows.map(r=>{
-    const val = k => {
-      const idx = mapIndex[k];
-      return idx>=0 ? (r[idx]??'').trim() : '';
-    };
-    return {
-      id: val('id'),
-      nombre: val('nombre'),
-      categoria: val('categoria'),
-      barrio: val('barrio'),
-      lat: parseFloat(String(val('lat')).replace(',','.')),
-      lng: parseFloat(String(val('lng')).replace(',','.')),
-      imagen: val('imagen'),
-      direccion: val('direccion'),
-      tags: val('tags')
-    };
-  });
-  return data;
-}
-/* ================ ESTADO APP =================== */
-let DATA = [];       // dataset crudo
-let READY = false;   // indica si ya cargamos el CSV alguna vez
-let LAST_FETCH = ''; // fecha/hora texto
+function csvURL(){return BASE_CSV + (BASE_CSV.includes('?')?'&':'?') + 'v=' + Date.now();}
 
-function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+/* === Geo === */
 function parseCoord(v){
   if(!v)return NaN;
   let s=String(v).trim().replace(/,/g,'.');
@@ -184,195 +72,263 @@ function parseCoord(v){
   if(Number.isNaN(n)){
     const d=s.replace(/[^0-9]/g,'');
     if(d.length>=7){ n=parseInt(d,10)/1e6; if(/^[-]/.test(s)) n=-Math.abs(n); }
-async function fetchCSV(){
-  estado('Cargando CSV…');
-  try{
-    const res = await fetch(`${DATA_URL}?_=${Date.now()}`, {cache:'no-store'});
-    const txt = await res.text();
-    DATA = csvParse(txt);
-    READY = true;
-    LAST_FETCH = new Date().toLocaleString();
-    estado(`CSV cargado: ${DATA.length} filas (no se muestran hasta que busques).`);
-    poblarFiltros();
-  }catch(err){
-    console.error(err);
-    estado('Error cargando CSV. Ver consola/red.');
   }
   if(Math.abs(n)>180) n/=1e6;
   return n;
+  const rows=txt.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
+  const head=rows.shift().map(h=>String(h).trim().toLowerCase().replace(/\s+/g,"_"));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
-function distKm(a,b){const R=6371,t=x=>x*Math.PI/180,dLat=t(b.lat-a.lat),dLng=t(b.lng-a.lng);
+function haversineKm(a,b){
+  const R=6371,toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
   const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
-  const A=s1*s1+Math.cos(t(a.lat))*Math.cos(t(b.lat))*s2*s2;
+  const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
-function poblarFiltros(){
-  const cats = [...new Set(DATA.map(d=>d.categoria).filter(Boolean))].sort((a,b)=>norm(a).localeCompare(norm(b)));
-  const barrios = [...new Set(DATA.map(d=>d.barrio).filter(Boolean))].sort((a,b)=>norm(a).localeCompare(norm(b)));
-  const $cat = $('#cat'), $bar = $('#barrio');
-  $cat.innerHTML = '<option value="">Categoría</option>' + cats.map(c=>`<option>${c}</option>`).join('');
-  $bar.innerHTML = '<option value="">Barrio</option>' + barrios.map(c=>`<option>${c}</option>`).join('');
-}
-function render(arr,msg){
-  const box=document.getElementById("results");
-  if(!arr||!arr.length){box.innerHTML=`<p>${msg||"Sin resultados"}</p>`;return;}
-  box.innerHTML=arr.map(r=>`
-    <div class="card">
-      <b>${r.nombre_local||"—"}</b> — ${r.rubro||""}<br>
-      ${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}
-      ${r.imagen_url?`<img src="${r.imagen_url}" style="max-height:100px;border-radius:8px;margin-top:6px">`:""}
-    </div>`).join("");
-function card(d){
-  const tieneImg = d.imagen && d.imagen.trim().length>5;
-  return `
-  <article class="card" data-id="${d.id||''}">
-    <div class="imgbox" style="position:relative;">
-      ${tieneImg ? `<img loading="lazy" src="${d.imagen}" alt="${d.nombre||'Comercio'}" onerror="this.closest('.card').querySelector('.imgbox').innerHTML='<span style=&quot;color:#7d8aa3&quot;>Sin imagen</span>';">` : `<span style="color:#7d8aa3">Sin imagen</span>`}
-      ${d.categoria ? `<span class="badge">${d.categoria}</span>`:''}
-    </div>
-    <div class="body">
-      <h3 class="title">${d.nombre||'Sin nombre'}</h3>
-      <p class="meta">${[d.direccion, d.barrio].filter(Boolean).join(' · ')}</p>
-      ${Number.isFinite(d._dist) ? `<p class="meta">A ${Math.round(d._dist)} m</p>`:''}
-      ${d.tags ? `<p class="meta">Tags: ${d.tags}</p>`:''}
-    </div>
-  </article>`;
-}
-async function loadCSV(){
-  const t=await fetch(CSV).then(r=>r.text());
-  DATA=parseCSV(t);
-function render(lista){
-  const cont = $('#lista');
-  cont.innerHTML = lista.map(card).join('');
-  $('#vacio').style.display = lista.length ? 'none' : 'block';
-  $('#foot').textContent = `v5 • ${lista.length} resultado(s) • última carga: ${LAST_FETCH||'—'}`;
-}
-function aliasQuery(q){
-  let s=norm(q);
-  s=s.replace(/\bgastronomics?\b/g,"gastronomix")
-     .replace(/\bhelad(e|o|a|os|as)\b/g,"heladeria")
-     .replace(/\bcom(er|ida|er|edor|edores|erias?)\b/g,"gastronomia")
-     .replace(/\blibr(o|eria|os)\b/g,"libreria")
-     .replace(/\bcierre(s)?\b/g,"costureria")
-     .replace(/\barreglo(s)?\b/g,"costureria")
-     .replace(/\bcafe(s|cito)?\b/g,"cafe")
-     .replace(/\bcentro\b/g,"microcentro");
-  return s;
-function filtrar(opts){
-  const { texto, cat, barrio, incluirSinImg } = opts;
-  const q = norm(texto);
-  let base = DATA.slice();
-  if(q){
-    base = base.filter(d=>{
-      const hay = [d.nombre,d.categoria,d.barrio,d.tags].map(norm).join(' ');
-      return hay.includes(q) || q.split(/\s+/).every(t=>hay.includes(t));
-    });
-  }
-  if(cat) base = base.filter(d=> (d.categoria||'')===cat);
-  if(barrio) base = base.filter(d=> (d.barrio||'')===barrio);
-  if(!incluirSinImg) base = base.filter(d=>(d.imagen||'').trim().length>5);
-  return base;
-}
-function buscar(qv){
-  if(!DATA.length){render([],"Cargando datos...");return;}
-  const w=aliasQuery(qv);
-  if(!w){render([],"Escribí un texto para buscar");return;}
-  let res=DATA.filter(r=>{
-    const nombre=norm(r.nombre_local), rubro=norm(r.rubro), dir=norm(r.direccion), kw=norm(r.keywords||"");
-    return nombre.includes(w)||rubro.includes(w)||dir.includes(w)||kw.includes(w);
-  });
-  render(res.length?res:[],"Sin resultados");
-/* ================ ACCIONES UI =================== */
-async function ensureData(){
-  if(!READY) await fetchCSV();
-}
-function buscarCerca(){
-  if(!navigator.geolocation){alert("Geolocalización no disponible");return;}
-$('#btnBuscar').addEventListener('click', async ()=>{
-  await ensureData();
-  const lista = filtrar({
-    texto: $('#q').value,
-    cat: $('#cat').value,
-    barrio: $('#barrio').value,
-    incluirSinImg: $('#inclSinImg').checked
-  });
-  render(lista);
-  estado(`Buscar: ${lista.length} encontrado(s).`);
-});
-$('#btnTodos').addEventListener('click', async ()=>{
-  await ensureData();
-  const lista = filtrar({
-    texto: '',
-    cat: $('#cat').value,
-    barrio: $('#barrio').value,
-    incluirSinImg: $('#inclSinImg').checked
-  });
-  render(lista);
-  estado(`Mostrar todos: ${lista.length}.`);
-});
-$('#btnCerca').addEventListener('click', async ()=>{
-  await ensureData();
-  if(!navigator.geolocation){
-    estado('Sin geolocalización disponible.');
-    return;
-  }
-  estado('Buscando tu ubicación…');
-  navigator.geolocation.getCurrentPosition(pos=>{
-    POS={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    const res=DATA.map(r=>{
-      const lat=parseCoord(r.lat),lng=parseCoord(r.lng);
-      if(!isFinite(lat)||!isFinite(lng))return null;
-      const d=distKm(POS,{lat,lng});
-      return {...r,dist:d};
-    }).filter(r=>r&&r.dist<=1.5).sort((a,b)=>a.dist-b.dist);
-    render(res.length?res:[],"No hay locales cercanos");
-  },()=>alert("No se pudo obtener ubicación"));
 }
 
-document.getElementById("goBtn").onclick=()=>buscar(document.getElementById("q").value);
-document.getElementById("clearBtn").onclick=()=>{document.getElementById("q").value="";render([],"Esperando búsqueda...");};
-document.getElementById("refreshBtn").onclick=()=>{loadCSV();render([],"Datos actualizados, hacé una búsqueda");};
-document.getElementById("nearBtn").onclick=buscarCerca;
-document.getElementById("q").addEventListener("keydown",e=>{if(e.key==="Enter")buscar(e.target.value);});
+/* === Estado === */
+let DATA=[], IDX=[], USER_POS=null, NEAR=false, LOADED=false;
+const STREET_ANCHORS=['santafe','9dejulio','corrientes'];
+const STOP=new Set(['hola','buenas','busco','un','una','el','la','en','por','a','al','del','las','los']);
+const BARRIOS=['microcentro','centro','recoleta','palermo','belgrano','caballito','flores','retiro','san nicolas','monserrat','balvanera','almagro','boedo','san telmo','barracas','constitucion','chacarita','villa crespo','colegiales','nunez','saavedra','parque patricios','parque chas'];
+function csvURL(){return BASE_CSV+(BASE_CSV.includes("?")?"&":"?")+"v="+Date.now();}
+
+/* === Carga CSV === */
+let DATA=[],IDX=[],LOADED=false;
+function loadCSV(){
+  const st=document.getElementById('status');
+  st.style.display='block'; st.textContent='Cargando CSV…';
+  return fetch(csvURL(),{cache:'no-store'})
+    .then(r=>r.text())
+    .then(t=>{
+      if(/^\s*<!doctype/i.test(t)) throw new Error('El enlace no devolvió CSV (HTML).');
+      DATA=parseCSV(t);
+      IDX=DATA.map(row=>{
+        const nombre=norm(row.nombre_local||row.nombre||row.local||'');
+        const rubro=norm(row.rubro||'');
+        const kw=norm((row.keywords||'')+' '+(row.nombre_local||row.nombre||'')+' '+(row.rubro||'')+' '+(row.barrio||''));
+        const dirbar=norm((row.direccion||'')+' '+(row.barrio||''));
+        const lat=parseCoord(row.lat), lng=parseCoord(row.lng);
+        // también guardo imagen_url cruda para render
+        const img=(row.imagen_url||'').trim().replace(/^"+|"+$/g,'');
+        return {nombre,rubro,kw,dirbar,lat,lng,img};
+      });
+      st.textContent='CSV cargado OK · filas: ' + DATA.length;
+      LOADED=true;
+    })
+    .catch(e=>{
+      const el=document.getElementById('error'); el.style.display='block';
+      el.textContent='No se pudo leer el CSV. '+(e.message||e);
+  const st=document.getElementById("status");
+  st.style.display="block";st.textContent="Cargando CSV…";
+  return fetch(csvURL(),{cache:"no-store"})
+  .then(r=>r.text())
+  .then(t=>{
+    if(/^\s*<!doctype/i.test(t)) throw new Error("El enlace no devolvió CSV (HTML).");
+    DATA=parseCSV(t);
+    IDX=DATA.map(row=>{
+      const nombre=norm(row.nombre_local||row.nombre||row.local||"");
+      const rubro=norm(row.rubro||"");
+      const kw=norm((row.keywords||"")+" "+(row.nombre_local||row.nombre||"")+" "+(row.rubro||"")+" "+(row.barrio||""));
+      const dirbar=norm((row.direccion||"")+" "+(row.barrio||""));
+      const img=(row.imagen_url||"").trim();
+      return {nombre,rubro,kw,dirbar,img};
+    });
+    st.textContent="CSV cargado OK · filas: "+DATA.length;
+    LOADED=true;
+  })
+  .catch(e=>{
+    const el=document.getElementById("error");el.style.display="block";el.textContent="No se pudo leer el CSV. "+(e.message||e);
+  });
+}
+
+/* === Buscador === */
+function tokenize(raw){
+  const qn=norm(raw);
+  let t=qn.split(/\s+/).filter(w=>!STOP.has(w));
+  t=t.filter(w=>w.length>=3);
+  const extra=[];
+  if(t.includes('almorzar')||t.includes('almuerzo')) extra.push('almuerzo','menu','comida','gastronomia','restaurante');
+  if(t.includes('centro')) extra.push('microcentro','centro');
+  return Array.from(new Set(t.concat(extra)));
+}
+function detectBarrio(q){
+  for(const b of BARRIOS){ if(q.includes(b)) return b; }
+  const m=q.match(/\ben\s+([a-z0-9\s]{3,})$/);
+  return m?m[1].trim():'';
+document.getElementById("goBtn").addEventListener("click",buscar);
+document.getElementById("clearBtn").addEventListener("click",()=>{document.getElementById("qall").value="";document.getElementById("results").innerHTML="";});
+document.getElementById("refreshBtn").addEventListener("click",()=>{LOADED=false;loadCSV().then(()=>{if(document.getElementById("qall").value.trim())buscar();});});
+
+function buscar(){
+  if(!LOADED){alert("Esperá que cargue el CSV…");return;}
+  const q=norm(document.getElementById("qall").value);
+  const arr=DATA.map((row,i)=>({row,i})).filter(o=>{
+    const M=IDX[o.i];
+    return M.nombre.includes(q)||M.rubro.includes(q)||M.kw.includes(q)||M.dirbar.includes(q);
+  });
+  render(arr);
+}
+function barrioMatch(dirbar,b){
+  if(!b) return true;
+  if(b==='centro') return dirbar.includes('centro')||dirbar.includes('microcentro');
+  return dirbar.includes(b);
+}
+
+/* === UI === */
+document.getElementById('goBtn').addEventListener('click',()=>buscar('text'));
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  document.getElementById('qall').value='';
+  document.getElementById('results').innerHTML='';
+  document.getElementById('gpsHint').style.display='none';
+  NEAR=false;
+});
+document.getElementById('refreshBtn').addEventListener('click',()=>{
+  LOADED=false; loadCSV().then(()=>{ if(document.getElementById('qall').value.trim()) buscar('text'); });
+});
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar('text');}});
+document.getElementById('locBtn').addEventListener('click',()=>{
+  const go=()=>{ NEAR=true; buscar('nearbutton'); };
+  if(!navigator.geolocation){ USER_POS={lat:-34.6037,lng:-58.3816}; go(); return; }
+  navigator.geolocation.getCurrentPosition(
+    p=>{ USER_POS={lat:p.coords.latitude,lng:p.coords.longitude}; go(); },
+    ()=>{ USER_POS={lat:-34.6037,lng:-58.3816}; go(); },
+    {enableHighAccuracy:true,timeout:8000,maximumAge:0}
+  );
+});
+
+/* === Mic === */
+(function(){
+  const b=document.getElementById('micBtn');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ b.disabled=true; b.innerText='🎤—'; return; }
+  const rec=new SR(); rec.lang='es-AR';
+  b.addEventListener('click',()=>{ try{rec.start(); b.innerText='⏺️';}catch(e){} });
+  rec.onresult=e=>{
+    const t=e.results[0][0].transcript||'';
+    document.getElementById('qall').value=aliasPhrases(removeDiacritics(t.toLowerCase()));
+    buscar('text');
+  };
+  rec.onend=()=>{ b.innerText='🎤'; };
+})();
+
+/* === CERCA === */
+function parseNearList(){
+  const withDist = DATA.map((row,i)=>{
+    const M=IDX[i];
+    if(!Number.isFinite(M.lat)||!Number.isFinite(M.lng)) return null;
+    const d=haversineKm(USER_POS,{lat:M.lat,lng:M.lng});
+    return {row:DATA[i],i,dist:d,idx:M};
+  }).filter(Boolean).sort((a,b)=>a.dist-b.dist);
+
+  let radius=1.5;
+  let inside=withDist.filter(o=>o.dist<=radius);
+  if(inside.length<3){ radius=2.0; inside=withDist.filter(o=>o.dist<=radius); }
+  if(inside.length<3){ radius=3.0; inside=withDist.filter(o=>o.dist<=radius); }
+
+  const gh=document.getElementById('gpsHint');
+  gh.style.display='block';
+  gh.textContent='📍 Cercanos dentro de '+radius.toFixed(1)+' km · '+inside.length+' resultados';
+  return inside.slice(0,40);
+}
+
+/* === Buscar === */
+function buscar(source){
+  if(!LOADED){ alert('Esperá que cargue el CSV…'); return; }
+  const raw=document.getElementById('qall').value||'';
+  const qnorm=norm(raw);
+  const toks=tokenize(raw);
+  const barrioQ=detectBarrio(qnorm);
+  const rubroT=toks.find(t=>['gastronomia','libreria','ferreteria','farmacia','kiosco','cafe','panaderia','verduleria','floreria','costureria','heladeria'].includes(t));
+
+  if(source==='text' && !/\bcerca(s|nos)?\b/.test(qnorm)){ NEAR=false; }
+  if(/\bcerca(s|nos)?\b/.test(qnorm)){ if(!USER_POS) USER_POS={lat:-34.6037,lng:-58.3816}; NEAR=true; }
+
+  if(NEAR && USER_POS){
+    const arr=parseNearList();
+    return render(arr.length?arr:[], arr.length?null:'No hay locales cercanos en el radio.');
+  }
+
+  const anchor = STREET_ANCHORS.find(a=>qnorm.includes(a));
+  if(anchor && !rubroT && !barrioQ){
+    NEAR=false;
+    const arr = DATA.map((row,i)=>({row,i,idx:IDX[i]}))
+                    .filter(o=>o.idx.dirbar.includes(anchor));
+    return render(arr.length?arr:[], arr.length?null:'No se encontraron resultados sobre '+anchor.replace('9dejulio','9 de julio')+'.');
+  }
+
+  if(rubroT && barrioQ){
+    const arr=DATA.map((row,i)=>({row,i,idx:IDX[i]}))
+                  .filter(o=>o.idx.rubro.includes(rubroT) && barrioMatch(o.idx.dirbar,barrioQ));
+    if(!arr.length) return render([],`No se encontraron resultados para ${rubroT} en ${barrioQ}.`);
+    return render(arr);
+  }
+
+  let arr=DATA.map((row,i)=>({row,i,idx:IDX[i],score:0}));
+  const hasTokens = toks.length>0;
+  if(hasTokens){
+    arr=arr.map(o=>{
+      const M=o.idx; let s=0;
+      toks.forEach(t=>{
+        if(M.nombre.includes(t))s+=3;
+        if(M.kw.includes(t))s+=2;
+        if(M.rubro.includes(t))s+=1;
+        if(M.dirbar.includes(t))s+=1;
+      });
+      return {...o,score:s};
+    }).filter(o=>o.score>0).sort((a,b)=>b.score-a.score);
+  }
+  if(!arr.length) return render([],`No se encontraron resultados para "${raw}".`);
+  render(arr.slice(0,40));
+}
+
+/* === Render === */
+function safeImg(u){
+  if(!u) return '';
+  const s=String(u).trim().replace(/^"+|"+$/g,''); // limpia comillas sueltas
+  if(!/^https?:\/\//i.test(s)) return '';
+  return s + (s.includes('?') ? '&' : '?') + 't=' + Date.now()%999999; // cache-buster suave
+  if(!u) return "";
+  const s=String(u).trim();
+  if(!/^https?:\/\//i.test(s)) return "";
+  return s+(s.includes("?")?"&":"?")+"t="+Date.now()%999999;
+}
+function render(arr,msg){
+  const box=document.getElementById('results');
+  if(!arr.length){ box.innerHTML=`<div class="tiny">${msg||'Sin resultados.'}</div>`; return; }
+function render(arr){
+  const box=document.getElementById("results");
+  if(!arr.length){box.innerHTML='<div class="tiny">Sin resultados.</div>';return;}
+  box.innerHTML=arr.map(o=>{
+    const r=o.row;
+    const idx=o.idx || {};
+    const name=r.nombre_local||r.nombre||r.local||'(sin nombre)';
+    const maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((r.direccion||'')+' '+(r.barrio||''));
+    const dist=(typeof o.dist==='number'&&isFinite(o.dist))?`<div class="meta">≈ ${(o.dist*10).toFixed(0)} cuadras</div>`:'';
+    const imgURL=safeImg(r.imagen_url || idx.img);
+    const imgTag = imgURL ? `<img class="thumb" loading="lazy" src="${imgURL}" alt="${name}" onerror="this.style.display='none'">` : '';
+    const name=r.nombre_local||r.nombre||r.local||"(sin nombre)";
+    const maps="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent((r.direccion||"")+" "+(r.barrio||""));
+    const imgURL=safeImg(r.imagen_url);
+    const imgTag=imgURL?`<img class="thumb" loading="lazy" src="${imgURL}" alt="${name}" onerror="this.style.display='none'">`:"";
+    return `<div class="card">
+      ${imgTag}
+      <div class="title">${name} — <span>${r.rubro||''}</span></div>
+      <div>${r.direccion||''} ${r.barrio?`(${r.barrio})`:''}</div>
+      ${dist}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <div class="title">${name} — <span>${r.rubro||""}</span></div>
+      <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
+      <div style="margin-top:8px;">
+        <a class="btn secondary" target="_blank" href="${maps}">Cómo llegar</a>
+      </div>
+    </div>`;
+  }).join('');
+  }).join("");
+}
+
+/* === Init === */
 loadCSV();
-    const {latitude,longitude} = pos.coords;
-    const R = parseInt($('#radio').value,10) || 600;
-    let lista = filtrar({
-      texto: $('#q').value,
-      cat: $('#cat').value,
-      barrio: $('#barrio').value,
-      incluirSinImg: $('#inclSinImg').checked
-    }).filter(d=>Number.isFinite(d.lat)&&Number.isFinite(d.lng))
-     .map(d=>{ d._dist = haversine(latitude,longitude,d.lat,d.lng); return d; })
-     .filter(d=>d._dist<=R)
-     .sort((a,b)=>a._dist-b._dist);
-    render(lista);
-    estado(`Cerca: ${lista.length} en ${R} m.`);
-  }, err=>{
-    console.warn(err);
-    estado('No se pudo obtener la ubicación.');
-  }, {enableHighAccuracy:true, timeout:7000, maximumAge:0});
-});
-$('#btnActualizar').addEventListener('click', async ()=>{
-  READY=false;
-  await fetchCSV();
-  render([]); // no mostrar automáticamente
-  $('#vacio').style.display='none';
-  estado('Actualizado. Pedime qué mostrar.');
-});
-$('#btnLimpiar').addEventListener('click', ()=>{
-  $('#q').value = '';
-  $('#cat').value = '';
-  $('#barrio').value = '';
-  $('#inclSinImg').checked = false;
-  render([]);
-  $('#vacio').style.display='none';
-  estado('Limpio. Nada en pantalla hasta que busques.');
-});
-$('#q').addEventListener('keydown', e=>{
-  if(e.key==='Enter') $('#btnBuscar').click();
-});
-/* Inicio sin render automático */
-estado('Listo. No se cargan comercios hasta que lo pidas.');
 </script>
 </body>
-</html>
