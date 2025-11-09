@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aquí Nomás — probando (estable + voz + frases)</title>
+<title>Aquí Nomás — probando (estable final)</title>
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
 .wrap{max-width:900px;margin:0 auto;padding:16px}
@@ -46,264 +46,82 @@ h1{font-size:22px;margin:0 0 12px}
 </div>
 
 <script>
-/* ------------------ BASE INTACTA (no modifiqué nada más que lo señalado) ------------------ */
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 const R_KM=1.0;
 let DATA=[],POS=null;
+
 const $=s=>document.querySelector(s);
-const setStatus=t=>$("#status").textContent=t||"";
+const qInput=$("#q"),statusEl=$("#status"),resultsEl=$("#results");
+const setStatus=t=>statusEl.textContent=t||"";
 
-function norm(t){
-  return (t||"")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g,"");
-}
-
+function norm(t){return(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
 function parseCSV(t){
-  const r=t.trim().split(/\r?\n/)
-    .map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-    .map(c=>c.replace(/^"|"$/g,"")));
+  const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));
   const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));
   return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));
 }
+function parseCoord(v){if(!v)return NaN;let s=String(v).replace(",",".");let n=parseFloat(s);if(!isFinite(n))return NaN;if(Math.abs(n)>180)n/=1e6;return n;}
+function hav(a,b){const R=6371,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const A=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(A));}
 
-function hav(a,b){
-  const R=6371,toRad=x=>x*Math.PI/180;
-  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
-  const A=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
-  return 2*R*Math.asin(Math.sqrt(A));
-}
-
-async function load(){
-  if(DATA.length) return;
+async function loadData(){
+  if(DATA.length)return;
+  setStatus("Cargando comercios…");
   const res=await fetch(CSV_URL+"&nocache="+Date.now());
   const txt=await res.text();
-  DATA=parseCSV(txt);
-  setStatus("CSV cargado: "+DATA.length+" filas.");
-}
+  const raw=parseCSV(txt);
 
-/* ------------------ REEMPLAZO 1: función SEARCH mejorada ------------------
-   Objetivo: entender mejor frases y palabras clave sin tocar nada más.
-   Lógica:
-   - si la query contiene una frase completa (>=4 chars) y el texto base la contiene -> match
-   - de otro modo tokenizo la query (palabras de 2+ letras) y matcheo si AL MENOS
-     UNA de las tokens aparece en el texto base (esto amplía matches sin exigir
-     que todas las palabras aparezcan).
-   - mantengo la lógica de distancia/near intacta.
-*/
-function tokensFromQuery(q){
-  if(!q) return [];
-  return norm(q)
-    .split(/\s+/)
-    .filter(t => t && t.length>=2 && !["en","por","sobre","de","la","el","los","las","un","una","y","al","del","para","cerca"].includes(t));
-}
-
-function search(query, onlyNear){
-  const q = (query||"").trim();
-  const tokens = tokensFromQuery(q);
-  const out = [];
-
-  // si no hay tokens y no es modo 'near', evitando devolver todo
-  if(!tokens.length && !onlyNear){
-    setStatus("Escribí algo más específico.");
-    return [];
-  }
-
-  const whole = norm(q);
-
-  for(const row of DATA){
-    // reconstruyo texto base igual que antes (sin tocar)
-    const base=norm([
-      row.nombre_local,row.nombre,row.rubro,row.categoria,
-      row.barrio,row.direccion,row.descripcion
-    ].join(" "));
-
-    // Si la query es una frase razonable y base la contiene -> match directo
-    let matched = false;
-    if(whole.length >= 4 && base.includes(whole)){
-      matched = true;
-    } else {
-      // busco por tokens: alcanza con QUE ALGUNA token aparezca (más flexible)
-      if(tokens.length){
-        for(const t of tokens){
-          if(base.includes(t)){
-            matched = true;
-            break;
-          }
-        }
-      } else {
-        // sin tokens: no filtrar por texto (pero evitamos devolver TODO si no es near)
-        matched = true;
-      }
-    }
-
-    if(!matched) continue;
-
-    // coords / distancia (no cambio la lógica)
-    let la=parseFloat(row.lat)||parseFloat(row.latitud);
-    let ln=parseFloat(row.lng)||parseFloat(row.longitud);
-    if(isNaN(la)||isNaN(ln)){ la=null; ln=null; }
-    let dist=null;
-    if(POS && la!=null && ln!=null){
-      dist = hav(POS,{lat:la,lng:ln});
-    }
-
-    if(onlyNear){
-      if(!dist || dist>R_KM) continue;
-    }
-
-    out.push({...row, distKm:dist});
-  }
-
-  // orden: primero por distancia (si existe), luego por nombre (sin cambiar)
-  out.sort((a,b)=>{
-    const da = typeof a.distKm==="number"?a.distKm:9999;
-    const db = typeof b.distKm==="number"?b.distKm:9999;
-    if(da!==db) return da-db;
-    const an = (a.nombre_local||a.nombre||"").toString();
-    const bn = (b.nombre_local||b.nombre||"").toString();
-    return an.localeCompare(bn);
+  // arreglo de nombres: usa tus columnas reales, sin perder rubros ni dirección
+  DATA = raw.map(r=>{
+    const name   = r.nombre_local || r.nombre || r.comercio || r.local || r.Nombre || "";
+    const rubro  = r.rubro || r.categoria || r.categoría || r.Rubro || "";
+    const barrio = r.barrio || r.zona || r.Barrio || "";
+    const dir    = r.direccion || r.dirección || r.calle || r.Direccion || "";
+    const latStr = r.lat || r.latitud || r.latitude || r.Latitud || "";
+    const lngStr = r.lng || r.longitud || r.lon || r.longitude || r.Longitud || "";
+    const lat=parseCoord(latStr),lng=parseCoord(lngStr);
+    const baseText=norm([name,rubro,barrio,dir].join(" "));
+    return {raw:r,name,rubro,barrio,dir,lat,lng,baseText};
   });
+  setStatus("Datos cargados: "+DATA.length+" locales.");
+}
 
+function tokensFromQuery(q){
+  const stop=["en","por","sobre","de","la","el","los","las","un","una","y","al","del","para","cerca"];
+  return norm(q).split(/\s+/).filter(t=>t&&!stop.includes(t)&&t.length>=3);
+}
+
+function search(query,onlyNear){
+  const tokens=tokensFromQuery(query);
+  if(!tokens.length&&!onlyNear){setStatus("Escribí algo más específico.");return[];}
+  const out=[];
+  for(const row of DATA){
+    let match=true;
+    if(tokens.length){
+      const hits=tokens.filter(t=>row.baseText.includes(t));
+      if(!hits.length)match=false;
+    }
+    if(!match)continue;
+    let dist=null;
+    if(POS&&!isNaN(row.lat)&&!isNaN(row.lng)){
+      dist=hav(POS,{lat:row.lat,lng:row.lng});
+    }
+    if(onlyNear){
+      if(dist==null||dist>R_KM)continue;
+    }
+    out.push({...row,distKm:dist});
+  }
+  out.sort((a,b)=>{
+    const da=(typeof a.distKm==="number")?a.distKm:9999;
+    const db=(typeof b.distKm==="number")?b.distKm:9999;
+    if(da!==db)return da-db;
+    return a.name.localeCompare(b.name);
+  });
   return out;
 }
 
-/* ------------------ REEMPLAZO 2: runVoice actualizada ------------------
-   Objetivo: hacer que la voz siempre dispare la MISMA búsqueda que el botón,
-   manejar onend y errores claramente y evitar quedarse en estado 'escuchando'.
-*/
-async function runVoice(){
-  await load(); // aseguro datos
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){
-    setStatus("Tu navegador no admite reconocimiento de voz.");
-    return;
-  }
-
-  let rec;
-  try {
-    rec = new SR();
-  } catch(e){
-    setStatus("No se pudo inicializar el reconocimiento de voz.");
-    return;
-  }
-
-  rec.lang = "es-AR";
-  rec.interimResults = false;
-  rec.maxAlternatives = 1;
-
-  // feedback
-  setStatus("🎤 Escuchando…");
-
-  // onresult: tomo lo reconocido, lo pongo en el input y ejecuto runSearch()
-  rec.onresult = (e) => {
-    try {
-      const txt = e.results[0][0].transcript;
-      const inputEl = document.getElementById("q");
-      inputEl.value = txt;
-      // uso la misma interfaz de búsqueda que el botón
-      // runSearch espera que load() ya corrió; aquí ya lo llamamos arriba
-      runSearch();
-      setStatus("Voz: " + txt);
-    } catch(err){
-      console.warn(err);
-      setStatus("Error al procesar la voz.");
-    } finally {
-      try{ rec.stop(); } catch(e){}
-    }
-  };
-
-  // onend: si no hubo resultado, dejo mensaje claro
-  rec.onend = () => {
-    // si no se reconoció nada, el onresult no habrá corrido; dejo indicación
-    if(!document.getElementById("q").value){
-      setStatus("No se detectó voz o permiso denegado. Revisá permisos del micrófono.");
-    }
-  };
-
-  rec.onerror = (ev) => {
-    console.warn("Speech error", ev);
-    if(ev.error === "not-allowed" || ev.error === "permission_denied"){
-      setStatus("Acceso al micrófono denegado. Revisá permisos del navegador.");
-    } else {
-      setStatus("Error de reconocimiento de voz.");
-    }
-    try{ rec.stop(); } catch(e){}
-  };
-
-  try {
-    rec.start();
-  } catch(e){
-    console.warn("No se pudo iniciar recognition", e);
-    setStatus("No se pudo iniciar el reconocimiento de voz.");
-  }
-}
-
-/* ------------------ RESTO DEL CÓDIGO (sin cambios) ------------------ */
-// render (igual que antes)
 function render(list){
-  if(!list.length){
-    $("#results").innerHTML = '<div class="empty">Sin resultados.</div>';
-    return;
-  }
-  $("#results").innerHTML = list.map(r=>{
-    const maps = `https://www.google.com/maps/search/?api=1&query=${
-      encodeURIComponent((r.dir||"")+" "+(r.barrio||""))
-    }`;
-    const dist = (typeof r.distKm==="number")
-      ? `<div class="meta">≈ ${r.distKm.toFixed(2)} km</div>` : "";
-    return `
-      <div class="card">
-        <div class="title">${r.name || "(sin nombre)"} — <span>${r.rubro||""}</span></div>
-        <div>${r.dir||""} ${r.barrio?`(${r.barrio})`:""}</div>
-        ${dist}
-        <div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div>
-      </div>
-    `;
-  }).join("");
-}
-
-async function runSearch(){
-  await load();
-  const q = (document.getElementById("q").value||"").trim();
-  const list = search(q,false);
-  render(list);
-  setStatus("Resultados: "+list.length);
-}
-
-async function runNear(){
-  await load();
-  if(!navigator.geolocation){
-    setStatus("Tu navegador no permite geolocalización.");
-    return;
-  }
-  setStatus("Buscando tu ubicación…");
-  navigator.geolocation.getCurrentPosition(pos=>{
-    POS = {lat:pos.coords.latitude,lng:pos.coords.longitude};
-    const list = search("",true);
-    render(list);
-    setStatus("Locales cercanos (≤ 1 km): "+list.length);
-  },()=>{
-    setStatus("No se pudo obtener la ubicación.");
-  });
-}
-
-// Eventos
-$("#go").addEventListener("click", runSearch);
-$("#near").addEventListener("click", runNear);
-$("#mic").addEventListener("click", runVoice);
-$("#clear").addEventListener("click", ()=>{
-  document.getElementById("q").value="";
-  $("#results").innerHTML="";
-  setStatus("Buscador limpio. Probá una frase o 'Cerca'.");
-});
-document.getElementById("q").addEventListener("keydown", e=>{
-  if(e.key==="Enter") runSearch();
-});
-
-// precarga
-load().then(()=>{ setStatus("Listo. Escribí, usá Voz o Cerca."); });
-</script>
-</body>
-</html>
+  if(!list.length){resultsEl.innerHTML='<div class="empty">Sin resultados.</div>';return;}
+  resultsEl.innerHTML=list.map(r=>{
+    const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.dir||"")+" "+(r.barrio||""))}`;
+    const dist=(typeof r.distKm==="number")?`<div class="meta">≈ ${r.distKm.toFixed(2)} km</div>`:"";
+    r
