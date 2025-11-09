@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aquí Nomás — probando (texto + voz corregido)</title>
+<title>Aquí Nomás — probando (estable)</title>
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
 .wrap{max-width:900px;margin:0 auto;padding:16px}
@@ -49,62 +49,170 @@ h1{font-size:22px;margin:0 0 12px}
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
 const R_KM=1.0;
 let DATA=[],POS=null;
+
 const $=s=>document.querySelector(s);
 const setStatus=t=>$("#status").textContent=t||"";
 
-function norm(t){return(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
-function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));}
-function hav(a,b){const R=6371,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng),A=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(A));}
+function norm(t){
+  return (t||"")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"");
+}
 
-async function load(){if(DATA.length)return;const res=await fetch(CSV_URL+"&nocache="+Date.now());const t=await res.text();DATA=parseCSV(t);setStatus("CSV cargado: "+DATA.length+" filas.");}
+function parseCSV(t){
+  const r=t.trim().split(/\r?\n/)
+    .map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+    .map(c=>c.replace(/^"|"$/g,"")));
+  const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));
+  return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));
+}
 
-// --- buscador flexible ---
+function hav(a,b){
+  const R=6371,toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
+  const A=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(A));
+}
+
+async function load(){
+  if(DATA.length) return;
+  const res=await fetch(CSV_URL+"&nocache="+Date.now());
+  const txt=await res.text();
+  DATA=parseCSV(txt);
+  setStatus("CSV cargado: "+DATA.length+" filas.");
+}
+
+// buscar: entiende frases, basta que ALGUNA palabra clave matchee
 function matchRow(r,q){
-  const base=norm([r.nombre_local,r.nombre,r.rubro,r.categoria,r.barrio,r.direccion,r.descripcion].join(" "));
+  const base=norm([
+    r.nombre_local,r.nombre,r.rubro,r.categoria,
+    r.barrio,r.direccion,r.descripcion
+  ].join(" "));
   const words=norm(q).split(/\s+/).filter(x=>x.length>2);
-  if(!words.length)return true;
+  if(!words.length) return true; // si no hay palabras útiles, no filtramos por texto
   return words.some(w=>base.includes(w));
 }
 
+// misma función para Buscar y Cerca
 function buscar(q,near){
   const L=[];
   for(const r of DATA){
-    let la=parseFloat(r.lat)||parseFloat(r.latitud),ln=parseFloat(r.lng)||parseFloat(r.longitud);
-    if(isNaN(la)||isNaN(ln))la=ln=null;
-    let dist=POS?(la&&ln?hav(POS,{lat:la,lng:ln}):null):null;
-    if(near){if(!dist||dist>R_KM)continue;}
-    if(q&&!matchRow(r,q))continue;
+    let la=parseFloat(r.lat)||parseFloat(r.latitud);
+    let ln=parseFloat(r.lng)||parseFloat(r.longitud);
+
+    if(isNaN(la)||isNaN(ln)){ la=null; ln=null; }
+
+    let dist=null;
+    if(POS && la!=null && ln!=null){
+      dist=hav(POS,{lat:la,lng:ln});
+    }
+
+    // filtro “Cerca”: solo **dentro** de 1 km
+    if(near){
+      if(!dist || dist>R_KM) continue;
+    }
+
+    // filtro de texto
+    if(q && !matchRow(r,q)) continue;
+
     r._distKm=dist;
     L.push(r);
   }
-  L.sort((a,b)=>{const da=a._distKm||9999,db=b._distKm||9999;return da-db;});
+
+  L.sort((a,b)=>{
+    const da=typeof a._distKm==="number"?a._distKm:9999;
+    const db=typeof b._distKm==="number"?b._distKm:9999;
+    return da-db;
+  });
+
   return L;
 }
 
 function render(L){
-  if(!L.length){$("#results").innerHTML='<div class="empty">Sin resultados.</div>';return;}
+  if(!L.length){
+    $("#results").innerHTML='<div class="empty">Sin resultados.</div>';
+    return;
+  }
   $("#results").innerHTML=L.map(r=>{
     const name=r.nombre_local||r.nombre||"(sin nombre)";
-    const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
-    const dist=(typeof r._distKm==="number")?`<div class='meta'>≈ ${r._distKm.toFixed(2)} km</div>`:"";
-    return `<div class="card"><div class="title">${name} — <span>${r.rubro||""}</span></div>
-    <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>${dist}
-    <div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div></div>`;
+    const maps=`https://www.google.com/maps/search/?api=1&query=${
+      encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))
+    }`;
+    const dist=(typeof r._distKm==="number")
+      ? `<div class="meta">≈ ${r._distKm.toFixed(2)} km</div>`
+      : "";
+    return `<div class="card">
+      <div class="title">${name} — <span>${r.rubro||""}</span></div>
+      <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
+      ${dist}
+      <div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div>
+    </div>`;
   }).join("");
 }
 
-$("#go").onclick=async()=>{await load();const q=$("#q").value.trim();const L=buscar(q,false);render(L);setStatus("Resultados: "+L.length);};
-$("#clear").onclick=()=>{$("#q").value="";$("#results").innerHTML="";setStatus("");};
-$("#near").onclick=async()=>{await load();if(!navigator.geolocation){setStatus("Sin geolocalización.");return;}
-navigator.geolocation.getCurrentPosition(p=>{POS={lat:p.coords.latitude,lng:p.coords.longitude};const L=buscar("",true);render(L);setStatus("Cerca (≤1 km): "+L.length);});};
+// BOTÓN BUSCAR (texto)
+$("#go").onclick=async()=>{
+  await load();
+  const q=$("#q").value.trim();
+  const L=buscar(q,false);
+  render(L);
+  setStatus("Resultados: "+L.length);
+};
 
-// --- voz + enter ---
-$("#mic").onclick=async()=>{await load();const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){setStatus("Sin reconocimiento de voz.");return;}
-const rec=new SR();rec.lang="es-AR";rec.start();setStatus("🎤 Escuchando…");
-rec.onresult=e=>{const t=e.results[0][0].transcript;$("#q").value=t;rec.stop();const L=buscar(t,false);render(L);setStatus("Voz: '"+t+"' ("+L.length+")");};
-rec.onerror=()=>setStatus("Error al escuchar.");};
-$("#q").addEventListener("keydown",e=>{if(e.key==="Enter")$("#go").click();});
+// LIMPIAR (no se toca)
+$("#clear").onclick=()=>{
+  $("#q").value="";
+  $("#results").innerHTML="";
+  setStatus("");
+};
 
+// CERCA (devuelto a la lógica que filtraba bien)
+$("#near").onclick=async()=>{
+  await load();
+  if(!navigator.geolocation){
+    setStatus("Sin geolocalización.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(p=>{
+    POS={lat:p.coords.latitude,lng:p.coords.longitude};
+    const L=buscar("",true);
+    render(L);
+    setStatus("Cerca (≤1 km): "+L.length);
+  },()=>{
+    setStatus("No se pudo obtener la ubicación.");
+  });
+};
+
+// VOZ: llena el campo y usa la MISMA búsqueda que el botón
+$("#mic").onclick=async()=>{
+  await load();
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    setStatus("Sin reconocimiento de voz.");
+    return;
+  }
+  const rec=new SR();
+  rec.lang="es-AR";
+  rec.start();
+  setStatus("🎤 Escuchando…");
+  rec.onresult=e=>{
+    const txt=e.results[0][0].transcript;
+    $("#q").value=txt;
+    rec.stop();
+    const L=buscar(txt,false);
+    render(L);
+    setStatus("Voz: '"+txt+"' ("+L.length+")");
+  };
+  rec.onerror=()=>setStatus("Error al escuchar.");
+};
+
+// ENTER = Buscar
+$("#q").addEventListener("keydown",e=>{
+  if(e.key==="Enter") $("#go").click();
+});
+
+// precarga
 load();
 </script>
 </body>
