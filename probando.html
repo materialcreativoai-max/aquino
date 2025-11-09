@@ -1,57 +1,27 @@
-<!doctype html>
-<html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aquí Nomás — probando (estable)</title>
+<title>Aquí Nomás — probando (estable + voz + frases)</title>
+<title>Aquí Nomás — probando (estable final)</title>
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
 .wrap{max-width:900px;margin:0 auto;padding:16px}
-h1{font-size:22px;margin:0 0 12px}
-.box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-bottom:12px}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.input{flex:1 1 200px;padding:10px 12px;border-radius:999px;border:1px solid #e2e8f0}
-.btn{border-radius:999px;border:1px solid transparent;padding:8px 12px;font-size:14px;cursor:pointer;background:#0b5cff;color:#fff}
-.btn.ghost{background:#fff;color:#6b7280;border-color:#e2e8f0}
-.btn.secondary{background:#e5edff;color:#1e40af}
-.btn.mic{background:#fee2e2;color:#b91c1c}
-.tiny{font-size:12px;color:#6b7280;margin-top:4px}
-.card{border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;background:#fff}
-.card .title{font-weight:600;margin-bottom:2px}
-.card .title span{font-weight:400;color:#6b7280}
-.card .meta{font-size:12px;color:#6b7280;margin-top:4px}
-.empty{font-size:14px;color:#6b7280;padding:8px}
-@media(max-width:600px){
-  .row{flex-direction:column;align-items:stretch}
-  .input{width:100%}
-}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>🏷️ Aquí Nomás — probando (estable)</h1>
-
-  <div class="box">
-    <div class="row">
-      <input id="q" class="input" placeholder="Ej: 'almorzar en Santa Fe', 'arreglo de cierres Caballito'">
-      <button id="mic"   class="btn mic">🎤 Voz</button>
-      <button id="go"    class="btn">Buscar</button>
-      <button id="clear" class="btn ghost">Limpiar</button>
-      <button id="near"  class="btn secondary">📍 Cerca (1 km)</button>
-    </div>
-    <div id="status" class="tiny"></div>
-  </div>
-
-  <div id="results" class="box"></div>
-</div>
-
+@@ -48,13 +48,226 @@ <h1>🏷️ Aquí Nomás — probando (estable)</h1>
 <script>
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSg0UeYMVZj0b9H2V63XS37oXlIwJ6SL4n-m6WJEbspzM5OP9QA3QF6qSw4fr81dw/pub?gid=1861393565&single=true&output=csv";
-const R_KM = 1.0;
+const R_KM=1.0;
+let DATA=[],POS=null;
+const $=s=>document.querySelector(s);
+const setStatus=t=>$("#status").textContent=t||"";
 
-let DATA = [];
-let POS  = null;
+function norm(t){return(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));}
+function hav(a,b){const R=6371,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng),A=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(A));}
+async function load(){if(DATA.length)return;const res=await fetch(CSV_URL+"&nocache="+Date.now());const t=await res.text();DATA=parseCSV(t);setStatus("CSV cargado: "+DATA.length+" filas.");}
+let DATA=[];   // comercios
+let POS=null;  // {lat,lng}
 
+// --- buscar coincidencias de frase
 const $ = s => document.querySelector(s);
 const qInput   = $("#q");
 const statusEl = $("#status");
@@ -68,83 +38,31 @@ function norm(t){
     .replace(/[\u0300-\u036f]/g,"");
 }
 
-// Parseo simple de CSV con soporte para comillas
-function parseCSV(text){
-  const lines = text.trim().split(/\r?\n/);
-  const headerLine = lines.shift();
-  const headers = headerLine
-    .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-    .map(h => h.replace(/^"|"$/g,"").trim().toLowerCase());
-
-  return lines.map(line=>{
-    if(!line.trim()) return null;
-    const cells = line
-      .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-      .map(c => c.replace(/^"|"$/g,"").trim());
-    const row = {};
-    headers.forEach((h,i)=>{ row[h] = cells[i] || ""; });
-    return row;
-  }).filter(Boolean);
-}
-
-// Cargar datos desde el sheet, adaptado a TU estructura de columnas
-async function loadData(){
-  if(DATA.length) return;
-  setStatus("Cargando comercios…");
-  const res = await fetch(CSV_URL + "&nocache=" + Date.now());
-  const txt = await res.text();
-  const rows = parseCSV(txt);
-
-  DATA = rows.map(r=>{
-    // columnas exactas que me diste:
-    // nombre_local, rubro, keywords, direccion, barrio, lat, lng, horario, whatsapp, promo_texto, id_local, logo_key, imagen_url
-    const nombre_local = r["nombre_local"] || "";
-    const rubro        = r["rubro"]        || "";
-    const keywords     = r["keywords"]     || "";
-    const direccion    = r["direccion"]    || "";
-    const barrio       = r["barrio"]       || "";
-    const horario      = r["horario"]      || "";
-    const whatsapp     = r["whatsapp"]     || "";
-    const promo_texto  = r["promo_texto"]  || "";
-    const id_local     = r["id_local"]     || "";
-    const logo_key     = r["logo_key"]     || "";
-    const imagen_url   = r["imagen_url"]   || "";
-
-    const lat = parseFloat(r["lat"]);
-    const lng = parseFloat(r["lng"]);
-
-    const texto = norm([
-      nombre_local,
-      rubro,
-      keywords,
-      direccion,
-      barrio
-    ].join(" "));
-
-    return {
-      nombre_local,
-      rubro,
-      keywords,
-      direccion,
-      barrio,
-      lat: isNaN(lat)?null:lat,
-      lng: isNaN(lng)?null:lng,
-      horario,
-      whatsapp,
-      promo_texto,
-      id_local,
-      logo_key,
-      imagen_url,
-      texto
-    };
+function parseCSV(txt){
+  const rows = txt.trim()
+    .split(/\r?\n/)
+    .map(r => r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map(c => c.replace(/^"|"$/g,"")));
+  const head = rows.shift()
+    .map(h => h.trim().toLowerCase().replace(/\s+/g,"_"));
+  return rows.map(r => {
+    const o={};
+    head.forEach((h,i)=>{o[h]=(r[i]||"").trim();});
+    return o;
   });
-
-  setStatus("Datos cargados: " + DATA.length + " locales.");
 }
 
-// Distancia en km
+function parseCoord(v){
+  if(!v) return NaN;
+  let s=String(v).replace(",",".");
+  let n=parseFloat(s);
+  if(!isFinite(n)) return NaN;
+  if(Math.abs(n)>180) n=n/1e6;
+  return n;
+}
+
 function haversineKm(a,b){
-  const R=6371, toRad=x=>x*Math.PI/180;
+  const R=6371,toRad=x=>x*Math.PI/180;
   const dLat=toRad(b.lat-a.lat);
   const dLng=toRad(b.lng-a.lng);
   const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
@@ -152,7 +70,34 @@ function haversineKm(a,b){
   return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
 }
 
-// Palabras útiles de la query
+async function loadData(){
+  if(DATA.length) return;
+  setStatus("Cargando comercios…");
+  const res = await fetch(CSV_URL+"&nocache="+Date.now());
+  const txt = await res.text();
+  const raw = parseCSV(txt);
+
+  DATA = raw.map(r=>{
+    const name   = r.nombre_local || r.nombre || r.comercio || r.local || "";
+    const rubro  = r.rubro || r.categoria || r.categoría || "";
+    const barrio = r.barrio || r.zona || "";
+    const dir    = r.direccion || r.dirección || r.calle || "";
+
+    const latStr = r.lat || r.latitud || r.latitude || "";
+    const lngStr = r.lng || r.longitud || r.lon || r.longitude || "";
+
+    const lat = parseCoord(latStr);
+    const lng = parseCoord(lngStr);
+
+    const baseText = norm([name,rubro,barrio,dir].join(" "));
+
+    return { raw:r, name, rubro, barrio, dir, lat, lng, baseText };
+  });
+
+  setStatus("Datos cargados: "+DATA.length+" locales.");
+}
+
+// tokens: saco artículos y conectores para que las frases no molesten
 function tokensFromQuery(q){
   const stop = ["en","por","sobre","de","la","el","los","las","un","una","y","al","del","para","cerca"];
   return norm(q)
@@ -160,97 +105,82 @@ function tokensFromQuery(q){
     .filter(t => t && !stop.includes(t) && t.length>=3);
 }
 
-// Búsqueda principal
 function search(query, onlyNear){
   const tokens = tokensFromQuery(query);
-  const out = [];
 
   if(!tokens.length && !onlyNear){
     setStatus("Escribí algo más específico.");
     return [];
   }
 
+  const out = [];
+
   for(const row of DATA){
     let match = true;
 
-    // Filtro de texto: basta con que ALGUNA palabra clave matchee
+    // coincidencia por intención: basta que ALGUNA palabra clave aparezca
     if(tokens.length){
-      const hits = tokens.filter(t => row.texto.includes(t));
+      const hits = tokens.filter(t => row.baseText.includes(t));
       if(!hits.length) match = false;
     }
 
     if(!match) continue;
 
-    // Distancia
+    // distancia (solo si tenemos POS y coords)
     let dist = null;
-    if(POS && row.lat!=null && row.lng!=null){
+    if(POS && !isNaN(row.lat) && !isNaN(row.lng)){
       dist = haversineKm(POS,{lat:row.lat,lng:row.lng});
     }
 
-    // Modo cerca: solo dentro de 1 km
+    // modo CERCA: solo dentro del km
     if(onlyNear){
       if(dist==null || dist>R_KM) continue;
     }
 
-    out.push({...row, distKm: dist});
+    out.push({...row, distKm:dist});
   }
 
-  // Orden: primero cercanía, después nombre
+  // orden: primero más cerca, luego nombre
   out.sort((a,b)=>{
     const da = (typeof a.distKm==="number")?a.distKm:9999;
     const db = (typeof b.distKm==="number")?b.distKm:9999;
     if(da!==db) return da-db;
-    return a.nombre_local.localeCompare(b.nombre_local);
+    return a.name.localeCompare(b.name);
   });
 
   return out;
 }
 
-// Render de resultados
 function render(list){
   if(!list.length){
     resultsEl.innerHTML = '<div class="empty">Sin resultados.</div>';
     return;
   }
-
   resultsEl.innerHTML = list.map(r=>{
     const maps = `https://www.google.com/maps/search/?api=1&query=${
-      encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))
+      encodeURIComponent((r.dir||"")+" "+(r.barrio||""))
     }`;
     const dist = (typeof r.distKm==="number")
       ? `<div class="meta">≈ ${r.distKm.toFixed(2)} km</div>` : "";
-
-    const img = r.imagen_url
-      ? `<img src="${r.imagen_url}" alt="${r.nombre_local}" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:6px;" onerror="this.remove()">`
-      : "";
-
     return `
       <div class="card">
-        ${img}
-        <div class="title">${r.nombre_local || "(sin nombre)"} — <span>${r.rubro||""}</span></div>
-        <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
-        ${r.horario?`<div class="meta">Horario: ${r.horario}</div>`:""}
-        ${r.promo_texto?`<div class="meta">${r.promo_texto}</div>`:""}
+        <div class="title">${r.name || "(sin nombre)"} — <span>${r.rubro||""}</span></div>
+        <div>${r.dir||""} ${r.barrio?`(${r.barrio})`:""}</div>
         ${dist}
-        <div class="meta">
-          ${r.whatsapp?`<a href="https://wa.me/54${String(r.whatsapp).replace(/[^0-9]/g,"")}" target="_blank">WhatsApp</a> · `:""}
-          <a href="${maps}" target="_blank">Cómo llegar</a>
-        </div>
+        <div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div>
       </div>
     `;
   }).join("");
 }
 
-// Buscar por texto
 async function runSearch(){
   await loadData();
   const q = qInput.value.trim();
   const list = search(q,false);
   render(list);
-  setStatus("Resultados: " + list.length);
+  setStatus("Resultados: "+list.length);
 }
 
-// Buscar cercanos
 async function runNear(){
   await loadData();
   if(!navigator.geolocation){
@@ -262,13 +192,12 @@ async function runNear(){
     POS = {lat:pos.coords.latitude,lng:pos.coords.longitude};
     const list = search("",true);
     render(list);
-    setStatus("Locales cercanos (≤ 1 km): " + list.length);
+    setStatus("Locales cercanos (≤ 1 km): "+list.length);
   },()=>{
     setStatus("No se pudo obtener la ubicación.");
   });
 }
 
-// Búsqueda por voz
 async function runVoice(){
   await loadData();
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -278,25 +207,17 @@ async function runVoice(){
   }
   const rec = new SR();
   rec.lang = "es-AR";
-  rec.interimResults = false;
-  rec.maxAlternatives = 1;
-  setStatus("🎤 Escuchando…");
   rec.start();
-
+  setStatus("Escuchando…");
   rec.onresult = e=>{
     const txt = e.results[0][0].transcript;
     qInput.value = txt;
     rec.stop();
     runSearch();
+    setStatus("Voz: "+txt);
   };
   rec.onerror = ()=>{
     setStatus("Error al escuchar.");
-    try{rec.stop();}catch(e){}
-  };
-  rec.onend = ()=>{
-    if(!qInput.value.trim()){
-      setStatus("No se detectó voz o se bloqueó el micrófono.");
-    }
   };
 }
 
@@ -307,14 +228,16 @@ $("#mic").addEventListener("click", runVoice);
 $("#clear").addEventListener("click", ()=>{
   qInput.value="";
   resultsEl.innerHTML="";
-  setStatus("");
+  setStatus("Buscador limpio. Probá una frase o 'Cerca'.");
 });
 qInput.addEventListener("keydown", e=>{
   if(e.key==="Enter") runSearch();
 });
 
-// Carga inicial silenciosa
-loadData().then(()=>{ setStatus("Listo. Escribí, usá Voz o Cerca."); });
+// precarga silenciosa
+loadData().then(()=>{
+  setStatus("Listo. Escribí, usá Voz o Cerca.");
+});
 </script>
 </body>
 </html>
