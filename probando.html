@@ -170,15 +170,53 @@ document.getElementById('locBtn').onclick=buscarCerca;
 document.getElementById('refreshBtn').onclick=loadCSV;
 document.getElementById('autoChk').onchange=e=>{if(e.target.checked){loadCSV();refreshTimer=setInterval(loadCSV,15000);}else{clearInterval(refreshTimer);}};
 
-// --- voz segura ---
+// --- voz estable ---
 (function(){
-  const b=document.getElementById('micBtn');
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){b.disabled=true;b.innerText='🎤—';return;}
-  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;let active=false;
-  b.onclick=()=>{if(active)return;try{rec.start();active=true;b.innerText='⏺️';}catch{}};
-  rec.onresult=e=>{const t=e.results[0][0].transcript||'';document.getElementById('qall').value=t.trim();buscar();};
-  rec.onend=()=>{active=false;b.innerText='🎤';};
+  const b = document.getElementById('micBtn');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    b.disabled = true;
+    b.innerText = '🎤—';
+    b.title = 'Reconocimiento de voz no disponible en este navegador';
+    return;
+  }
+
+  const rec = new SR();
+  rec.lang = 'es-AR';
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  let active = false;
+
+  b.addEventListener('click', () => {
+    if (active) return;
+    try {
+      rec.start();
+      active = true;
+      b.innerText = '⏺️ Escuchando...';
+      STATUS.style.display = 'block';
+      STATUS.textContent = '🎤 Escuchando... hablá claro';
+    } catch {}
+  });
+
+  rec.onresult = e => {
+    const txt = e.results[0][0].transcript.trim();
+    document.getElementById('qall').value = txt;
+    STATUS.textContent = '🎤 Reconocido: ' + txt;
+    rec.stop();
+    buscar();
+  };
+
+  rec.onerror = err => {
+    STATUS.style.display = 'block';
+    STATUS.textContent = 'Error de micrófono: ' + (err.error || 'desconocido');
+    active = false;
+    b.innerText = '🎤';
+  };
+
+  rec.onend = () => {
+    active = false;
+    b.innerText = '🎤';
+  };
 })();
 
 // --- inicio ---
