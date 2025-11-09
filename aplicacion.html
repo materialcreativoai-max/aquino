@@ -52,89 +52,150 @@ async function cargarCSV(){
     const res = await fetch(DATA_URL + "&nocache=" + Date.now(), {cache:"no-store"});
     if(!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
-    const rows = text.split(/\r?\n/).filter(l => l.trim() !== "").map(l => l.split(","));
+    const rows = text
+      .split(/\r?\n/)
+      .filter(l => l.trim() !== "")
+      .map(l => l.split(","));
+
     const head = rows.shift().map(h => h.trim().toLowerCase());
-    const idx = k => head.findIndex(h => h.includes(k));
+
+    const findIdx = keys =>
+      head.findIndex(h => keys.some(k => h.includes(k)));
+
+    const idxNombre    = findIdx(["nombre","comercio","local"]);
+    const idxCategoria = findIdx(["categoria","rubro","tipo"]);
+    const idxBarrio    = findIdx(["barrio","zona"]);
+    const idxDireccion = findIdx(["direccion","dirección","calle"]);
+    const idxLat       = findIdx(["lat","latitud","latitude"]);
+    const idxLng       = findIdx(["lng","lon","longitud","longitude"]);
+    const idxImagen    = findIdx(["imagen","foto","img","url"]);
+
     DATA = rows.map(r => ({
-      nombre: r[idx("nombre")] || "",
-      categoria: r[idx("categoria")] || "",
-      barrio: r[idx("barrio")] || "",
-      direccion: r[idx("direccion")] || "",
-      lat: parseFloat(r[idx("lat")] || "") || null,
-      lng: parseFloat(r[idx("lng")] || "") || null,
-      imagen: r[idx("imagen")] || ""
+      nombre:    idxNombre    >= 0 ? (r[idxNombre]    || "") : "",
+      categoria: idxCategoria >= 0 ? (r[idxCategoria] || "") : "",
+      barrio:    idxBarrio    >= 0 ? (r[idxBarrio]    || "") : "",
+      direccion: idxDireccion >= 0 ? (r[idxDireccion] || "") : "",
+      lat:       idxLat       >= 0 ? (parseFloat(r[idxLat]) || null) : null,
+      lng:       idxLng       >= 0 ? (parseFloat(r[idxLng]) || null) : null,
+      imagen:    idxImagen    >= 0 ? (r[idxImagen]    || "") : ""
     }));
+
     LOADED = true;
     estado("CSV cargado: " + DATA.length + " filas (no se muestran hasta que busques).");
   } catch(e) {
+    console.error(e);
     estado("Error al cargar datos del Sheet.");
   }
 }
 
 function render(lista){
   const cont = $("#resultado");
+  if(!lista || !lista.length){
+    cont.innerHTML = "";
+    $("#vacio").style.display = "block";
+    return;
+  }
   cont.innerHTML = lista.map(d => `
   <div class="card">
-    ${d.imagen ? `<img src="${d.imagen}" alt="${d.nombre}" onerror="this.remove()">`
-      : `<div style='height:150px;display:flex;align-items:center;justify-content:center;color:#7d8aa3;'>Sin imagen</div>`}
+    ${d.imagen
+      ? `<img src="${d.imagen}" alt="${d.nombre}" onerror="this.remove()">`
+      : `<div style="height:150px;display:flex;align-items:center;justify-content:center;color:#7d8aa3;">Sin imagen</div>`}
     <h3>${d.nombre}</h3>
-    <p>${d.categoria||""} ${d.barrio ? "· "+d.barrio : ""}</p>
-    <p>${d.direccion||""}</p>
+    <p>${d.categoria || ""}${d.barrio ? " · " + d.barrio : ""}</p>
+    <p>${d.direccion || ""}</p>
   </div>`).join("");
-  $("#vacio").style.display = lista.length ? "none" : "block";
+  $("#vacio").style.display = "none";
+}
+
+function normalizarTxt(t){
+  return t.toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"");
 }
 
 function filtrar(q){
-  const n = q.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-  return DATA.filter(d => Object.values(d).join(" ").toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes(n));
+  const textoQ = normalizarTxt(q);
+  const tokens = textoQ.split(/\s+/).filter(t => t.length >= 3);
+  if(!tokens.length) return [];
+
+  return DATA.filter(d => {
+    const base = normalizarTxt(
+      [d.nombre, d.categoria, d.barrio, d.direccion].join(" ")
+    );
+    // matchea si al menos un token aparece
+    return tokens.some(t => base.includes(t));
+  });
 }
 
 $("#btnBuscar").onclick = async ()=>{
   if(!LOADED) await cargarCSV();
   const q = $("#busqueda").value.trim();
-  if(!q){estado("Escribí algo o usá el micrófono.");return;}
+  if(!q){
+    estado("Escribí algo o usá el micrófono.");
+    return;
+  }
   const r = filtrar(q);
   render(r);
-  estado("Buscar: "+r.length+" encontrado(s).");
+  estado("Buscar: " + r.length + " resultado(s).");
 };
 
 $("#btnLimpiar").onclick = ()=>{
-  $("#busqueda").value="";
+  $("#busqueda").value = "";
   render([]);
-  $("#vacio").style.display="none";
   estado("Limpio. Nada en pantalla hasta que busques.");
 };
 
 $("#btnActualizar").onclick = async ()=>{
-  LOADED=false;
+  LOADED = false;
   await cargarCSV();
   render([]);
-  $("#vacio").style.display="none";
+  estado("Datos actualizados. Buscá de nuevo para ver resultados.");
 };
 
 $("#btnCerca").onclick = async ()=>{
   if(!LOADED) await cargarCSV();
-  if(!navigator.geolocation){estado("Geolocalización no disponible.");return;}
+  if(!navigator.geolocation){
+    estado("Geolocalización no disponible.");
+    return;
+  }
   estado("Buscando tu ubicación…");
   navigator.geolocation.getCurrentPosition(pos=>{
-    const {latitude,longitude}=pos.coords;
-    const R=6371000,toRad=g=>g*Math.PI/180,radio=600;
-    const lista=DATA.filter(d=>d.lat&&d.lng).map(d=>{
-      const dLat=toRad(d.lat-latitude),dLon=toRad(d.lng-longitude);
-      const a=Math.sin(dLat/2)**2+Math.cos(toRad(latitude))*Math.cos(toRad(d.lat))*Math.sin(dLon/2)**2;
-      const dist=2*R*Math.asin(Math.sqrt(a));
-      return {...d,dist};
-    }).filter(d=>d.dist<=radio).sort((a,b)=>a.dist-b.dist);
+    const {latitude, longitude} = pos.coords;
+    const R = 6371000;
+    const toRad = g => g * Math.PI / 180;
+    const radio = 600;
+
+    const lista = DATA
+      .filter(d => d.lat != null && d.lng != null)
+      .map(d=>{
+        const dLat = toRad(d.lat - latitude);
+        const dLon = toRad(d.lng - longitude);
+        const a = Math.sin(dLat/2)**2 +
+          Math.cos(toRad(latitude))*Math.cos(toRad(d.lat))*Math.sin(dLon/2)**2;
+        const dist = 2 * R * Math.asin(Math.sqrt(a));
+        return {...d, dist};
+      })
+      .filter(d => d.dist <= radio)
+      .sort((a,b) => a.dist - b.dist);
+
     render(lista);
-    estado("Cerca: "+lista.length+" en 600 m.");
-  },()=>estado("No se pudo obtener la ubicación."));
+    if(lista.length){
+      estado("Cerca: " + lista.length + " en 600 m.");
+    }else{
+      estado("Cerca: no encontramos locales en 600 m.");
+    }
+  },()=>{
+    estado("No se pudo obtener la ubicación.");
+  });
 };
 
 $("#btnVoz").onclick = async ()=>{
   if(!LOADED) await cargarCSV();
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){estado("Tu navegador no admite reconocimiento de voz.");return;}
+  if(!SR){
+    estado("Tu navegador no admite reconocimiento de voz.");
+    return;
+  }
   const rec = new SR();
   rec.lang = "es-ES";
   rec.start();
@@ -144,9 +205,11 @@ $("#btnVoz").onclick = async ()=>{
     $("#busqueda").value = txt;
     const r = filtrar(txt);
     render(r);
-    estado("Voz: '"+txt+"' → "+r.length+" resultado(s).");
+    estado("Voz: '" + txt + "' → " + r.length + " resultado(s).");
   };
-  rec.onerror = ()=>estado("Error al escuchar.");
+  rec.onerror = ()=>{
+    estado("Error al escuchar.");
+  };
 };
 
 cargarCSV();
