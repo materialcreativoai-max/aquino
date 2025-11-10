@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Aquí Nomás — DEMO inteligente (sinónimos)</title>
+<!--ID_SYS:AQNM_20251110_V1-->
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -103,7 +104,6 @@ async function loadCSV(){
 
 // --- LÓGICA DE FRASES ---
 const VERBOS=["comer","almorzar","comprar","buscar","necesito","arreglar","quiero","tomar"];
-// nuevo diccionario de sinónimos
 const SYNONYMS={
   comer:["almorzar","cenar","merendar","degustar","probar","comida","gastronomia","restaurante"],
   almorzar:["comer","menu","plato","comida","gastronomia"],
@@ -126,9 +126,7 @@ function tokenVariants(t){const v=new Set([t]);if(t.endsWith("s")&&t.length>3)v.
 function isBarrioToken(t){if(!window._BARRIOS)return false;return window._BARRIOS.includes(t);}
 function expandTokens(arr){
   const out=new Set(arr);
-  for(const t of arr){
-    if(SYNONYMS[t])SYNONYMS[t].forEach(x=>out.add(x));
-  }
+  for(const t of arr){if(SYNONYMS[t])SYNONYMS[t].forEach(x=>out.add(x));}
   return Array.from(out);
 }
 function scoreRow(d,toks,hasVerb){
@@ -153,9 +151,11 @@ function buscar(fromText){
   if(!raw){render([],"Escribí o dictá algo.");return;}
   const q=norm(raw);const hasVerb=VERBOS.some(v=>q.includes(v));
   const local=detectLocal(q);
-  if(local){const dist=(USER_POS&&isFinite(local.lat)&&isFinite(local.lng))?hav(USER_POS,{lat:local.lat,lng:local.lng}):null;
+  if(local){
+    const dist=(USER_POS&&isFinite(local.lat)&&isFinite(local.lng))?hav(USER_POS,{lat:local.lat,lng:local.lng}):null;
     INTENT_HINT.style.display="block";INTENT_HINT.textContent=`🔎 Intención: "${raw}" → local: ${local.nombre}`;
-    render([{row:local.row,dist}],`Mostrando: ${local.nombre}`);return;}
+    render([{row:local.row,dist}],`Mostrando: ${local.nombre}`);return;
+  }
   const barrioTerm=detectBarrio(q);
   const allTokens=q.split(/\s+/).filter(t=>t.length>2);
   const toksNoVerbos=allTokens.filter(t=>!VERBOS.includes(t));
@@ -166,7 +166,11 @@ function buscar(fromText){
   for(const d of DATA){
     if(barrioTerm&&d.barrioNorm&&!d.barrioNorm.includes(barrioTerm))continue;
     const sc=scoreRow(d,scoringTokens,hasVerb);if(sc<=0)continue;
-    if(hasVerb){let strong=false;for(const t of scoringTokens){for(const v of tokenVariants(t)){if(d.rubroNorm.includes(v)||d.kwNorm.includes(v)){strong=true;break;}}if(strong)break;}if(!strong)continue;}
+    if(hasVerb){
+      let strong=false;
+      for(const t of scoringTokens){for(const v of tokenVariants(t)){if(d.rubroNorm.includes(v)||d.kwNorm.includes(v)){strong=true;break;}}if(strong)break;}
+      if(!strong)continue;
+    }
     const dist=(USER_POS&&isFinite(d.lat)&&isFinite(d.lng))?hav(USER_POS,{lat:d.lat,lng:d.lng}):null;
     out.push({row:d.row,dist,score:sc,nombre:d.nombre});
   }
@@ -227,4 +231,16 @@ document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==="Enter
   if(!SR){b.disabled=true;b.innerText='🎤—';return;}
   const rec=new SR();rec.lang='es-AR';rec.continuous=false;rec.interimResults=false;let active=false;
   b.onclick=()=>{if(active)return;try{rec.start();active=true;b.textContent='⏺️';showStatus("Escuchando…");hideIntent();}catch{}};
-  rec.onresult=e=>{const t=e.results[0][0].transcript||'';const limpio=t.trim();document.getElementById('qall').value=limpio;showStatus("Voz: "+limpio);buscar(limpio
+  rec.onresult=e=>{
+    const t=e.results[0][0].transcript||'';
+    const limpio=t.trim();
+    document.getElementById('qall').value=limpio;
+    showStatus("Voz: "+limpio);
+    buscar(limpio);
+  };
+  rec.onend=()=>{active=false;b.textContent='🎤';showStatus("");};
+})();
+loadCSV();
+</script>
+</body>
+</html>
