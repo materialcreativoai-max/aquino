@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO intención mejorada</title>
+<title>Aquí Nomás — DEMO inteligente</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:22px;margin:0 0 12px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — DEMO intención mejorada</h1>
+  <h1>🏷️ Aquí Nomás — DEMO inteligente</h1>
   <div id="status" class="ok"></div>
   <div id="error" class="err"></div>
 
@@ -49,6 +49,7 @@ h1{font-size:22px;margin:0 0 12px}
       <div class="tiny" id="tsHint" style="margin-left:auto;text-align:right"></div>
     </div>
     <div class="tiny" id="gpsHint" style="margin-top:6px;display:none"></div>
+    <div class="tiny" id="intentHint" style="margin-top:4px;display:none"></div>
   </div>
 
   <div id="results" class="box"></div>
@@ -61,117 +62,381 @@ const STATUS=document.getElementById("status");
 const ERR=document.getElementById("error");
 const SRC=document.getElementById("srcHint");
 const TSH=document.getElementById("tsHint");
+const GPS_HINT=document.getElementById("gpsHint");
+const INTENT_HINT=document.getElementById("intentHint");
+
 SRC.textContent="Fuente CSV: "+CSV_URL;
-let DATA=[],USER_POS=null,LOADED=false,refreshTimer=null;
+
+let DATA=[];        // filas enriquecidas
+let USER_POS=null;  // {lat,lng}
+let LOADED=false;
+let refreshTimer=null;
 
 // --- UTILES ---
 function showStatus(m){STATUS.style.display=m?"block":"none";STATUS.textContent=m||"";}
 function showError(m){ERR.style.display=m?"block":"none";ERR.textContent=m||"";}
-function removeDiacritics(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
-function norm(s){return removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();}
-function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));}
-function parseCoord(v){if(!v)return NaN;let s=String(v).replace(",",".");let n=parseFloat(s);if(!isFinite(n)){const d=s.replace(/[^0-9]/g,"");if(d.length>=7)n=parseInt(d,10)/1e6;}if(Math.abs(n)>180)n/=1e6;return n;}
-function hav(a,b){const R=6371,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
+function hideIntent(){INTENT_HINT.style.display="none";INTENT_HINT.textContent="";}
+
+function removeDiacritics(s){
+  return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+}
+function norm(s){
+  return removeDiacritics(String(s||"").toLowerCase())
+    .replace(/[^a-z0-9\s]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+function parseCSV(t){
+  const r=t.trim().split(/\r?\n/).map(
+    l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,""))
+  );
+  const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));
+  return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));
+}
+function parseCoord(v){
+  if(!v)return NaN;
+  let s=String(v).replace(",",".");
+  let n=parseFloat(s);
+  if(!isFinite(n)){
+    const d=s.replace(/[^0-9]/g,"");
+    if(d.length>=7)n=parseInt(d,10)/1e6;
+  }
+  if(Math.abs(n)>180)n/=1e6;
+  return n;
+}
+function hav(a,b){
+  const R=6371,toRad=x=>x*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
+  const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);
+  const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));
+}
 
 // --- CARGA CSV ---
 async function loadCSV(){
   try{
     showError("");showStatus("Cargando CSV…");
     const r=await fetch(CSV_URL+"&nocache="+Date.now(),{cache:"no-store"});
-    const txt=await r.text();if(/^\s*<!doctype/i.test(txt))throw new Error("HTML en vez de CSV");
-    const raw=parseCSV(txt);const barrios=new Set();
+    const txt=await r.text();
+    if(/^\s*<!doctype/i.test(txt))throw new Error("HTML en vez de CSV");
+
+    const raw=parseCSV(txt);
+    const barrios=new Set();
+
     DATA=raw.map(row=>{
       const nombre=row.nombre_local||row.nombre||row.local||"";
-      const rubro=row.rubro||"",barrio=row.barrio||"",dir=row.direccion||"",kw=row.keywords||"";
+      const rubro=row.rubro||"";
+      const barrio=row.barrio||"";
+      const dir=row.direccion||"";
+      const kw=row.keywords||"";
+
       const lat=parseCoord(row.lat),lng=parseCoord(row.lng);
+
+      const nombreNorm=norm(nombre);
+      const rubroNorm=norm(rubro);
+      const barrioNorm=norm(barrio);
+      const kwNorm=norm(kw);
       const textNorm=norm([nombre,rubro,barrio,dir,kw].join(" "));
-      const obj={row,nombre,rubro,barrio,dir,kw,lat,lng,textNorm,nombreNorm:norm(nombre),rubroNorm:norm(rubro),barrioNorm:norm(barrio),kwNorm:norm(kw)};
-      if(obj.barrioNorm)barrios.add(obj.barrioNorm);
-      return obj;
+
+      if(barrioNorm) barrios.add(barrioNorm);
+
+      return {
+        row,
+        nombre,
+        rubro,
+        barrio,
+        dir,
+        kw,
+        lat,
+        lng,
+        nombreNorm,
+        rubroNorm,
+        barrioNorm,
+        kwNorm,
+        textNorm
+      };
     });
-    window._BARRIOS=Array.from(barrios);
-    LOADED=true;showStatus("CSV cargado OK · "+DATA.length+" filas.");TSH.textContent="Actualizado: "+new Date().toLocaleTimeString();
-  }catch(e){LOADED=false;showStatus("");showError("Error CSV: "+(e.message||e));}
+
+    window._BARRIOS = Array.from(barrios);
+
+    LOADED=true;
+    showStatus("CSV cargado OK · "+DATA.length+" filas.");
+    TSH.textContent="Actualizado: "+new Date().toLocaleTimeString();
+  }catch(e){
+    LOADED=false;
+    showStatus("");
+    showError("Error CSV: "+(e.message||e));
+  }
 }
 
-// --- LÓGICA ---
-const VERBOS=["comer","almorzar","comprar","buscar","necesito","arreglar","quiero"];
-function detectBarrio(q){if(!window._BARRIOS)return"";if(q.includes("centro")&&!q.includes("microcentro")&&window._BARRIOS.includes("microcentro"))return"microcentro";for(const b of window._BARRIOS){if(q.includes(b))return b;}return"";}
-function detectLocal(q){let m=null;for(const d of DATA){if(!d.nombreNorm)continue;if(q.includes(d.nombreNorm)){if(m&&m!==d)return null;m=d;}}return m;}
-function tokenVariants(t){const v=new Set([t]);if(t.endsWith("s"))v.add(t.slice(0,-1));if(t.endsWith("es"))v.add(t.slice(0,-2));return[...v];}
+// --- LÓGICA DE FRASES ---
+const VERBOS = ["comer","almorzar","comprar","buscar","necesito","arreglar","quiero","tomar"];
+
+function detectBarrio(q){
+  if(!window._BARRIOS) return "";
+  if(q.includes("centro") && !q.includes("microcentro") && window._BARRIOS.includes("microcentro")){
+    return "microcentro";
+  }
+  for(const b of window._BARRIOS){
+    if(q.includes(b)) return b;
+  }
+  return "";
+}
+
+function detectLocal(q){
+  let match=null;
+  for(const d of DATA){
+    if(!d.nombreNorm) continue;
+    if(q.includes(d.nombreNorm)){
+      if(match && match!==d) return null;
+      match=d;
+    }
+  }
+  return match;
+}
+
+function tokenVariants(t){
+  const v=new Set([t]);
+  if(t.endsWith("s") && t.length>3) v.add(t.slice(0,-1));
+  if(t.endsWith("es") && t.length>4) v.add(t.slice(0,-2));
+  return Array.from(v);
+}
+
+// uso para no considerar el barrio como “producto”
+function isBarrioToken(t){
+  if(!window._BARRIOS) return false;
+  return window._BARRIOS.includes(t);
+}
 
 function scoreRow(d,toks,hasVerb){
   let s=0;
   for(const t of toks){
-    for(const v of tokenVariants(t)){
-      if(d.nombreNorm.includes(v))s+=4;
-      if(d.rubroNorm.includes(v))s+=hasVerb?6:3;
-      if(d.kwNorm.includes(v))s+=hasVerb?5:2;
-      if(d.textNorm.includes(v))s+=1;
+    const vars=tokenVariants(t);
+    for(const v of vars){
+      if(d.nombreNorm.includes(v)) s+=4;
+      if(d.rubroNorm.includes(v)) s+=hasVerb?7:3;
+      if(d.kwNorm.includes(v))    s+=hasVerb?6:2;
+      if(d.textNorm.includes(v))  s+=1;
     }
   }
   return s;
 }
 
-// --- BUSCAR ---
+// --- BUSCAR (texto / voz) ---
 function buscar(fromText){
+  hideIntent();
   if(!LOADED){showStatus("Esperá que cargue el CSV…");return;}
-  const raw=(typeof fromText==="string"?fromText:document.getElementById('qall').value).trim();
+
+  const raw = (typeof fromText==="string" ? fromText : document.getElementById('qall').value).trim();
   if(!raw){render([],"Escribí o dictá algo.");return;}
-  const q=norm(raw);
-  const hasVerb=VERBOS.some(v=>q.includes(v));
-  const local=detectLocal(q);
-  if(local){render([{row:local.row,dist:null}],`Mostrando: ${local.nombre}`);return;}
-  const barrio=detectBarrio(q);
-  const toks=q.split(/\s+/).filter(x=>x.length>2&&!VERBOS.includes(x));
+
+  const q = norm(raw);
+  const hasVerb = VERBOS.some(v=>q.includes(v));
+
+  const local = detectLocal(q);
+  if(local){
+    const dist = (USER_POS && isFinite(local.lat) && isFinite(local.lng))
+      ? hav(USER_POS,{lat:local.lat,lng:local.lng})
+      : null;
+    INTENT_HINT.style.display="block";
+    INTENT_HINT.textContent=`🔎 Intención: "${raw}" → local: ${local.nombre}`;
+    render([{row:local.row,dist}],`Mostrando: ${local.nombre}`);
+    return;
+  }
+
+  const barrioTerm = detectBarrio(q);
+
+  const allTokens = q.split(/\s+/).filter(t=>t.length>2);
+  const toksNoVerbos = allTokens.filter(t=>!VERBOS.includes(t));
+
+  if(!toksNoVerbos.length){
+    render([], "Probá con alguna palabra clave, ej: 'helados', 'libros', 'artículos para el hogar'.");
+    return;
+  }
+
+  // tokens para puntuar (sin barrio si hay verbo → foco en producto)
+  const scoringTokensRaw = hasVerb
+    ? toksNoVerbos.filter(t=>!isBarrioToken(t))
+    : toksNoVerbos.slice();
+
+  const scoringTokens = scoringTokensRaw.length ? scoringTokensRaw : toksNoVerbos;
+
   const out=[];
   for(const d of DATA){
-    if(barrio&&d.barrioNorm&&!d.barrioNorm.includes(barrio))continue;
-    const sc=scoreRow(d,toks,hasVerb);
-    if(sc>0){const dist=(USER_POS&&isFinite(d.lat)&&isFinite(d.lng))?hav(USER_POS,{lat:d.lat,lng:d.lng}):null;out.push({row:d.row,dist,score:sc});}
+    if(barrioTerm && d.barrioNorm && !d.barrioNorm.includes(barrioTerm)) continue;
+
+    const sc = scoreRow(d, scoringTokens, hasVerb);
+    if(sc<=0) continue;
+
+    if(hasVerb){
+      // si hay intención, exigimos al menos un match fuerte en rubro o keywords
+      let strong=false;
+      for(const t of scoringTokens){
+        for(const v of tokenVariants(t)){
+          if(d.rubroNorm.includes(v) || d.kwNorm.includes(v)){
+            strong=true;
+            break;
+          }
+        }
+        if(strong) break;
+      }
+      if(!strong) continue;
+    }
+
+    const dist = (USER_POS && isFinite(d.lat) && isFinite(d.lng))
+      ? hav(USER_POS,{lat:d.lat,lng:d.lng})
+      : null;
+
+    out.push({row:d.row,dist,score:sc,nombre:d.nombre});
   }
-  out.sort((a,b)=>b.score-a.score);
+
+  out.sort((a,b)=>{
+    if(a.dist!=null && b.dist!=null && a.dist!==b.dist) return a.dist-b.dist;
+    if(b.score!==a.score) return b.score-a.score;
+    const na=a.nombre||"",nb=b.nombre||"";
+    return na.localeCompare(nb);
+  });
+
+  if(out.length){
+    let detalle = [];
+    if(hasVerb) detalle.push("intención detectada");
+    if(barrioTerm) detalle.push("zona: "+barrioTerm);
+    if(scoringTokens.length) detalle.push("claves: "+scoringTokens.join(", "));
+    INTENT_HINT.style.display="block";
+    INTENT_HINT.textContent = `🔎 Intención: "${raw}"${detalle.length? " → " + detalle.join(" · ") : ""}`;
+  }
+
   render(out);
 }
 
-// --- CERCA ---
+// --- CERCA (no se toca la lógica básica) ---
 function buscarCerca(){
+  hideIntent();
   if(!LOADED){showStatus("Esperá que cargue el CSV…");return;}
-  const hint=document.getElementById('gpsHint');
+
   function run(){
-    const n=[];for(const d of DATA){if(!isFinite(d.lat)||!isFinite(d.lng))continue;const dist=hav(USER_POS,{lat:d.lat,lng:d.lng});n.push({row:d.row,dist});}
-    n.sort((a,b)=>a.dist-b.dist);let r=1.5;let inR=n.filter(o=>o.dist<=r);if(inR.length<3){r=3;inR=n.filter(o=>o.dist<=r);}
-    hint.style.display='block';hint.textContent=`📍 Mostrando ≤ ${r.toFixed(1)} km · ${inR.length} resultados`;render(inR);
+    const list=[];
+    for(const d of DATA){
+      if(!isFinite(d.lat)||!isFinite(d.lng)) continue;
+      const dist=haversineKm(USER_POS,{lat:d.lat,lng:d.lng});
+      list.push({row:d.row,dist});
+    }
+    list.sort((a,b)=>a.dist-b.dist);
+
+    let radius=1.5;
+    let inside=list.filter(o=>o.dist<=radius);
+    if(inside.length<3){radius=3.0;inside=list.filter(o=>o.dist<=radius);}
+
+    GPS_HINT.style.display='block';
+    GPS_HINT.textContent=`📍 Mostrando ≤ ${radius.toFixed(1)} km · ${inside.length} resultados`;
+    render(inside);
   }
-  if(USER_POS){run();return;}
-  if(!navigator.geolocation){USER_POS={lat:-34.6037,lng:-58.3816};hint.textContent="📍 Sin GPS, usando centro.";hint.style.display='block';run();return;}
-  navigator.geolocation.getCurrentPosition(p=>{USER_POS={lat:p.coords.latitude,lng:p.coords.longitude};hint.textContent="📍 Ubicación detectada.";hint.style.display='block';run();},()=>{USER_POS={lat:-34.6037,lng:-58.3816};hint.textContent="📍 Sin permiso, usando centro.";hint.style.display='block';run();});
+
+  if(USER_POS){
+    run();
+    return;
+  }
+
+  if(!navigator.geolocation){
+    USER_POS={lat:-34.6037,lng:-58.3816};
+    GPS_HINT.style.display='block';
+    GPS_HINT.textContent="📍 Sin GPS, usando centro.";
+    run();
+    return;
+  }
+
+  showStatus("Buscando tu ubicación…");
+  navigator.geolocation.getCurrentPosition(
+    p=>{
+      USER_POS={lat:p.coords.latitude,lng:p.coords.longitude};
+      showStatus("");
+      GPS_HINT.style.display='block';
+      GPS_HINT.textContent="📍 Ubicación detectada.";
+      run();
+    },
+    ()=>{
+      USER_POS={lat:-34.6037,lng:-58.3816};
+      showStatus("");
+      GPS_HINT.style.display='block';
+      GPS_HINT.textContent="📍 Sin permiso, usando centro.";
+      run();
+    },
+    {enableHighAccuracy:true,timeout:7000}
+  );
 }
 
 // --- RENDER ---
 function render(list,msg){
   const box=document.getElementById('results');
-  if(!list.length){box.innerHTML=`<div class="tiny">${msg||"Sin resultados."}</div>`;return;}
-  box.innerHTML=list.map(o=>{const r=o.row;const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;const dist=(typeof o.dist==="number")?`<div class="meta">≈ ${o.dist.toFixed(2)} km</div>`:"";return`<div class="card"><div class="title">${r.nombre_local||"(sin nombre)"} — <span>${r.rubro||""}</span></div><div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>${dist}<div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div></div>`;}).join("");
+  if(!list || !list.length){
+    box.innerHTML=`<div class="tiny">${msg||"Sin resultados."}</div>`;
+    return;
+  }
+  box.innerHTML=list.map(o=>{
+    const r=o.row;
+    const maps=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.direccion||"")+" "+(r.barrio||""))}`;
+    const dist=(typeof o.dist==="number")?`<div class="meta">≈ ${o.dist.toFixed(2)} km</div>`:"";
+    return `<div class="card">
+      <div class="title">${r.nombre_local||"(sin nombre)"} — <span>${r.rubro||""}</span></div>
+      <div>${r.direccion||""} ${r.barrio?`(${r.barrio})`:""}</div>
+      ${dist}
+      <div class="meta"><a href="${maps}" target="_blank">Cómo llegar</a></div>
+    </div>`;
+  }).join("");
 }
 
-// --- EVENTOS ---
+// --- EVENTOS UI ---
 document.getElementById('goBtn').onclick=()=>buscar();
-document.getElementById('clearBtn').onclick=()=>{document.getElementById('qall').value='';document.getElementById('results').innerHTML='';};
+document.getElementById('clearBtn').onclick=()=>{
+  document.getElementById('qall').value='';
+  document.getElementById('results').innerHTML='';
+  GPS_HINT.style.display='none';
+  hideIntent();
+  showStatus("");
+  showError("");
+};
 document.getElementById('locBtn').onclick=buscarCerca;
 document.getElementById('refreshBtn').onclick=loadCSV;
-document.getElementById('autoChk').onchange=e=>{if(e.target.checked){loadCSV();refreshTimer=setInterval(loadCSV,15000);}else{clearInterval(refreshTimer);}};
-document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==="Enter"){e.preventDefault();buscar();}});
+document.getElementById('autoChk').onchange=e=>{
+  if(e.target.checked){
+    loadCSV();
+    refreshTimer=setInterval(loadCSV,15000);
+  }else{
+    clearInterval(refreshTimer);
+  }
+};
+document.getElementById('qall').addEventListener('keydown',e=>{
+  if(e.key==="Enter"){e.preventDefault();buscar();}
+});
 
-// --- VOZ ---
+// --- VOZ: misma lógica que texto ---
 (function(){
   const b=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){b.disabled=true;b.innerText='🎤—';return;}
-  const rec=new SR();rec.lang='es-AR';rec.continuous=false;rec.interimResults=false;
+  const rec=new SR();
+  rec.lang='es-AR';
+  rec.continuous=false;
+  rec.interimResults=false;
   let active=false;
-  b.onclick=()=>{if(active)return;try{rec.start();active=true;b.textContent='⏺️';showStatus("Escuchando…");}catch{}};
-  rec.onresult=e=>{const t=e.results[0][0].transcript||'';const limpio=t.trim();document.getElementById('qall').value=limpio;showStatus("Voz: "+limpio);buscar(limpio);};
+
+  b.onclick=()=>{
+    if(active)return;
+    try{
+      rec.start();
+      active=true;
+      b.textContent='⏺️';
+      showStatus("Escuchando…");
+      hideIntent();
+    }catch{}
+  };
+  rec.onresult=e=>{
+    const t=e.results[0][0].transcript||'';
+    const limpio=t.trim();
+    document.getElementById('qall').value=limpio;
+    showStatus("Voz: "+limpio);
+    buscar(limpio);
+  };
   rec.onerror=()=>{showStatus("Error al escuchar.");};
   rec.onend=()=>{active=false;b.textContent='🎤';};
 })();
