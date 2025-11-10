@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO auto-refresh (segura)</title>
+<title>Aquí Nomás — DEMO auto-refresh (intención flexible)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -23,7 +23,6 @@ h1{font-size:22px;margin:0 0 12px}
 .meta{font-size:12px;color:#566;margin-top:4px}
 .ok{padding:8px 10px;background:#eef9f1;border:1px solid #cfead8;border-radius:10px;margin-bottom:12px;color:#145a32}
 .err{padding:8px 10px;background:#fff3f3;border:1px solid #ffd2d2;border-radius:10px;margin-bottom:12px;color:#7a1a1a}
-.badge{display:inline-block;padding:4px 8px;background:#eef3ff;border:1px solid #d7e3ff;color:#153a9b;border-radius:999px;font-size:12px;margin-right:6px}
 .switch{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#445}
 .switch input{transform:scale(1.2)}
 @media(max-width:600px){.row{flex-direction:column;align-items:stretch}.input{width:100%}}
@@ -31,13 +30,13 @@ h1{font-size:22px;margin:0 0 12px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — DEMO auto-refresh (segura)</h1>
+  <h1>🏷️ Aquí Nomás — DEMO auto-refresh (intención flexible)</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
   <div class="box">
     <div class="row">
-      <input id="qall" class="input" placeholder="Ej: 'almorzar en recoleta', 'cerca', 'santa fe'"/>
+      <input id="qall" class="input" placeholder="Ej: 'comprar libros', 'comer helado', 'almorzar en recoleta', 'cerca'"/>
       <button id="micBtn" class="btn mic" title="Dictar por voz">🎤</button>
       <button id="goBtn" class="btn">Buscar</button>
       <button id="clearBtn" class="btn ghost">Limpiar</button>
@@ -50,7 +49,6 @@ h1{font-size:22px;margin:0 0 12px}
       <div class="tiny" id="tsHint" style="margin-left:auto;text-align:right"></div>
     </div>
     <div class="tiny" id="gpsHint" style="margin-top:6px;display:none"></div>
-    <div class="tiny" id="intentHint" style="margin-top:6px;display:none"></div>
   </div>
 
   <div id="results" class="box"></div>
@@ -62,12 +60,36 @@ const STATUS=document.getElementById("status"),ERR=document.getElementById("erro
 SRC.textContent="Fuente CSV: "+CSV_FALLBACK;
 let DATA=[],IDX=[],USER_POS=null,LOADED=false,refreshTimer=null;
 
+// --- utilidades ---
 function removeDiacritics(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
 function norm(s){return removeDiacritics(String(s||"").toLowerCase()).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();}
 function parseCSV(t){const r=t.trim().split(/\r?\n/).map(l=>l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"")));const h=r.shift().map(x=>x.trim().toLowerCase().replace(/\s+/g,"_"));return r.map(l=>Object.fromEntries(h.map((x,i)=>[x,l[i]||""])));}
 function parseCoord(v){if(!v)return NaN;let s=String(v).replace(",",".");let n=parseFloat(s);if(!isFinite(n)){const d=s.replace(/[^0-9]/g,"");if(d.length>=7)n=parseInt(d,10)/1e6;}if(Math.abs(n)>180)n/=1e6;return n;}
 function hav(a,b){const R=6371,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);const s1=Math.sin(dLat/2),s2=Math.sin(dLng/2);const A=s1*s1+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*s2*s2;return 2*R*Math.asin(Math.min(1,Math.sqrt(A)));}
 
+// --- interpretación flexible ---
+function expandIntent(q){
+  const t=norm(q);
+  const map={
+    "comprar":"libros,libreria,ferreteria",
+    "leer":"libros,libreria",
+    "comer":"comidas,almorzar,gastronomia,helados",
+    "almorzar":"comidas,almorzar,gastronomia",
+    "arreglar":"costuras,cierres,arreglos",
+    "cerrar":"cierres,costuras,arreglos",
+    "flor":"flores,floreria",
+    "helado":"helados,heladeria",
+    "cafe":"cafe,gastronomia",
+    "pan":"panaderia,pan"
+  };
+  let extra=[];
+  for(const [k,v] of Object.entries(map)){
+    if(t.includes(k)) extra=extra.concat(v.split(","));
+  }
+  return q+" "+extra.join(" ");
+}
+
+// --- carga CSV ---
 async function loadCSV(){
   try{
     STATUS.style.display='block';ERR.style.display='none';STATUS.textContent='Cargando CSV…';
@@ -91,6 +113,7 @@ async function loadCSV(){
   }
 }
 
+// --- geolocalización ---
 function getGeo(cb){
   const hint=document.getElementById('gpsHint');
   if(!navigator.geolocation){
@@ -106,9 +129,11 @@ function getGeo(cb){
   );
 }
 
+// --- búsqueda ---
 function buscar(){
   if(!LOADED){STATUS.textContent="Esperá que cargue el CSV…";return;}
-  const q=document.getElementById('qall').value.trim().toLowerCase();
+  let q=document.getElementById('qall').value.trim().toLowerCase();
+  q=expandIntent(q);
   const tokens=q.split(/\s+/).filter(t=>t.length>2);
   if(!tokens.length){render([],"Escribí algo más específico.");return;}
   const out=[];
@@ -121,6 +146,7 @@ function buscar(){
   render(out);
 }
 
+// --- cerca ---
 function buscarCerca(){
   if(!LOADED){STATUS.textContent="Esperá que cargue el CSV…";return;}
   getGeo(()=>{
@@ -141,6 +167,7 @@ function buscarCerca(){
   });
 }
 
+// --- render ---
 function render(list,msg){
   const box=document.getElementById('results');
   if(!list.length){box.innerHTML='<div class="tiny">'+(msg||"Sin resultados.")+'</div>';return;}
@@ -157,6 +184,7 @@ function render(list,msg){
   }).join("");
 }
 
+// --- eventos UI ---
 document.getElementById('goBtn').onclick=buscar;
 document.getElementById('clearBtn').onclick=()=>{document.getElementById('qall').value='';document.getElementById('results').innerHTML='';};
 document.getElementById('locBtn').onclick=buscarCerca;
@@ -164,7 +192,7 @@ document.getElementById('refreshBtn').onclick=loadCSV;
 document.getElementById('autoChk').onchange=e=>{if(e.target.checked){loadCSV();refreshTimer=setInterval(loadCSV,15000);}else{clearInterval(refreshTimer);}};
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();buscar();}});
 
-// --- voz mejorada ---
+// --- voz ---
 (function(){
   const b=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
