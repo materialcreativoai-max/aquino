@@ -309,7 +309,7 @@ function buscar(fromText){
   render(out);
 }
 
-// --- CERCA (no se toca la lógica básica) ---
+// --- CERCA ---
 function buscarCerca(){
   hideIntent();
   if(!LOADED){showStatus("Esperá que cargue el CSV…");return;}
@@ -318,7 +318,8 @@ function buscarCerca(){
     const list=[];
     for(const d of DATA){
       if(!isFinite(d.lat)||!isFinite(d.lng)) continue;
-      const dist=haversineKm(USER_POS,{lat:d.lat,lng:d.lng});
+      // 👉 FIX: antes decía haversineKm (no existía). Ahora usa hav()
+      const dist = hav(USER_POS,{lat:d.lat,lng:d.lng});
       list.push({row:d.row,dist});
     }
     list.sort((a,b)=>a.dist-b.dist);
@@ -409,7 +410,7 @@ document.getElementById('qall').addEventListener('keydown',e=>{
   if(e.key==="Enter"){e.preventDefault();buscar();}
 });
 
-// --- VOZ: misma lógica que texto ---
+// --- VOZ ---
 (function(){
   const b=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
