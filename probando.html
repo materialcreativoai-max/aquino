@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO auto-refresh (voz estable)</title>
+<title>Aquí Nomás — DEMO voz final estable</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:22px;margin:0 0 12px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — DEMO auto-refresh (voz estable)</h1>
+  <h1>🏷️ Aquí Nomás — DEMO voz final estable</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
@@ -149,36 +149,25 @@ document.getElementById('clearBtn').onclick=()=>{document.getElementById('qall')
 document.getElementById('locBtn').onclick=buscarCerca;
 document.getElementById('refreshBtn').onclick=loadCSV;
 document.getElementById('autoChk').onchange=e=>{if(e.target.checked){loadCSV();refreshTimer=setInterval(loadCSV,15000);}else{clearInterval(refreshTimer);}};
+document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter')buscar();});
 
-// voz mejorada (frases naturales)
+// --- voz (idéntica a Buscar) ---
 (function(){
   const b=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){b.disabled=true;b.innerText='🎤—';return;}
-  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;
-  let active=false;
-
-  function limpiarFrase(t){
-    return t.toLowerCase()
-      .replace(/^(necesito|quiero|busco|buscar|podr[ií]a|me gustar[ií]a)\s+/,'')
-      .replace(/\s+(por favor|porfa)$/,'')
-      .trim();
-  }
-
+  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;let active=false;
   b.onclick=()=>{if(active)return;try{rec.start();active=true;b.innerText='⏺️';STATUS.style.display='block';STATUS.textContent='Escuchando…';}catch{}};
-
   rec.onresult=e=>{
-    let frase=e.results[0][0].transcript.trim();
-    frase=limpiarFrase(frase);
-    document.getElementById('qall').value=frase;
+    const t=e.results[0][0].transcript||'';
+    document.getElementById('qall').value=t.trim();
     STATUS.style.display='block';
-    STATUS.textContent='🎙️ '+frase;
-    buscar();
+    STATUS.textContent='🎙️ '+t.trim();
+    buscar(); // usa la misma lógica que el botón Buscar
   };
   rec.onerror=()=>{STATUS.style.display='block';STATUS.textContent='Error de voz.';};
   rec.onend=()=>{active=false;b.innerText='🎤';};
 })();
-document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter')buscar();});
 
 loadCSV();
 </script>
