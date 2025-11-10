@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Aquí Nomás — DEMO voz final estable</title>
+<title>Aquí Nomás — DEMO voz estable (final real)</title>
 <style>
 :root{--pri:#0b5cff;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f9fb;color:#0b1220}
@@ -30,7 +30,7 @@ h1{font-size:22px;margin:0 0 12px}
 </head>
 <body>
 <div class="wrap">
-  <h1>🏷️ Aquí Nomás — DEMO voz final estable</h1>
+  <h1>🏷️ Aquí Nomás — DEMO voz estable (final real)</h1>
   <div id="status" class="ok" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
 
@@ -143,7 +143,7 @@ function render(list,msg){
   }).join("");
 }
 
-// eventos UI
+// eventos
 document.getElementById('goBtn').onclick=buscar;
 document.getElementById('clearBtn').onclick=()=>{document.getElementById('qall').value='';document.getElementById('results').innerHTML='';};
 document.getElementById('locBtn').onclick=buscarCerca;
@@ -151,7 +151,7 @@ document.getElementById('refreshBtn').onclick=loadCSV;
 document.getElementById('autoChk').onchange=e=>{if(e.target.checked){loadCSV();refreshTimer=setInterval(loadCSV,15000);}else{clearInterval(refreshTimer);}};
 document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter')buscar();});
 
-// --- voz (idéntica a Buscar) ---
+// --- mic mejorado ---
 (function(){
   const b=document.getElementById('micBtn');
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -160,10 +160,11 @@ document.getElementById('qall').addEventListener('keydown',e=>{if(e.key==='Enter
   b.onclick=()=>{if(active)return;try{rec.start();active=true;b.innerText='⏺️';STATUS.style.display='block';STATUS.textContent='Escuchando…';}catch{}};
   rec.onresult=e=>{
     const t=e.results[0][0].transcript||'';
-    document.getElementById('qall').value=t.trim();
+    const limpio = t.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    document.getElementById('qall').value = limpio;
     STATUS.style.display='block';
-    STATUS.textContent='🎙️ '+t.trim();
-    buscar(); // usa la misma lógica que el botón Buscar
+    STATUS.textContent='🎙️ '+limpio;
+    buscar();
   };
   rec.onerror=()=>{STATUS.style.display='block';STATUS.textContent='Error de voz.';};
   rec.onend=()=>{active=false;b.innerText='🎤';};
